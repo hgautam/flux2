@@ -1,10 +1,13 @@
+---
+title: "flux export source bucket command"
+---
 ## flux export source bucket
 
 Export Bucket sources in YAML format
 
 ### Synopsis
 
-The export source git command exports on or all Bucket sources in YAML format.
+The export source git command exports one or all Bucket sources in YAML format.
 
 ```
 flux export source bucket [name] [flags]
@@ -18,7 +21,6 @@ flux export source bucket [name] [flags]
 
   # Export a Bucket source including the static credentials
   flux export source bucket my-bucket --with-credentials > source.yaml
-
 ```
 
 ### Options
@@ -32,7 +34,7 @@ flux export source bucket [name] [flags]
 ```
       --all                 select all resources
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -41,5 +43,5 @@ flux export source bucket [name] [flags]
 
 ### SEE ALSO
 
-* [flux export source](flux_export_source.md)	 - Export sources
+* [flux export source](../flux_export_source/)	 - Export sources
 

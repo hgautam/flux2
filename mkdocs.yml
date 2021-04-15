@@ -26,29 +26,34 @@ plugins:
 
 markdown_extensions:
   - admonition
-  - meta
   - codehilite:
       guess_lang: false
-  - toc:
-      permalink: true
+  - footnotes
+  - meta
+  - pymdownx.caret
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:materialx.emoji.twemoji
+  - pymdownx.extra
+  - pymdownx.progressbar
   - pymdownx.superfences:
       highlight_code: true
   - pymdownx.tabbed
-  - pymdownx.tilde
-  - pymdownx.progressbar
   - pymdownx.tasklist
-  - pymdownx.superfences
-  - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.tilde
+  - toc:
+      permalink: true
 
 nav:
   - Introduction: index.md
   - Core Concepts: core-concepts/index.md
   - Get Started: get-started/index.md
   - Migration:
-     - Migrate from Flux v1: guides/flux-v1-migration.md
-     - Migrate from the Helm Operator: guides/helm-operator-migration.md
+    - Migration and Support Timetable: migration/timetable.md
+    - Migrate from Flux v1: guides/flux-v1-migration.md
+    - Migrate from Flux v1 image update automation: guides/flux-v1-automation-migration.md
+    - Migrate from the Helm Operator: guides/helm-operator-migration.md
+    - FAQ: guides/faq-migration.md
   - Guides:
       - Installation: guides/installation.md
       - Manage Helm Releases: guides/helmreleases.md
@@ -58,6 +63,9 @@ nav:
       - Sealed Secrets: guides/sealed-secrets.md
       - Mozilla SOPS: guides/mozilla-sops.md
       - Automate image updates to Git: guides/image-update.md
+      - Sortable image tags to use with automation: guides/sortable-image-tags.md
+  - Use Cases:
+      - Azure: use-cases/azure.md
   - Toolkit Components:
     - Overview: components/index.md
     - Source Controller:
@@ -142,6 +150,7 @@ nav:
     - Get kustomizations: cmd/flux_get_kustomizations.md
     - Get helmreleases: cmd/flux_get_helmreleases.md
     - Get sources: cmd/flux_get_sources.md
+    - Get sources all: cmd/flux_get_sources_all.md
     - Get sources git: cmd/flux_get_sources_git.md
     - Get sources helm: cmd/flux_get_sources_helm.md
     - Get sources chart: cmd/flux_get_sources_chart.md
@@ -151,10 +160,12 @@ nav:
     - Get alert providers: cmd/flux_get_alert-providers.md
     - Get receivers: cmd/flux_get_receivers.md
     - Get images: cmd/flux_get_images.md
+    - Get images all: cmd/flux_get_images_all.md
     - Get images policy: cmd/flux_get_images_policy.md
     - Get images repository: cmd/flux_get_images_repository.md
     - Get images update: cmd/flux_get_images_update.md
     - Install: cmd/flux_install.md
+    - Logs: cmd/flux_logs.md
     - Resume: cmd/flux_resume.md
     - Resume kustomization: cmd/flux_resume_kustomization.md
     - Resume helmrelease: cmd/flux_resume_helmrelease.md
@@ -196,6 +207,7 @@ nav:
     - Uninstall: cmd/flux_uninstall.md
   - Dev Guides:
       - Watching for source changes: dev-guides/source-watcher.md
+      - Advanced debugging: dev-guides/debugging.md
   - Roadmap: roadmap/index.md
   - Contributing: contributing/index.md
   - FAQ: faq/index.md

@@ -25,6 +25,7 @@ import (
 	"github.com/fluxcd/flux2/internal/flags"
 	"github.com/fluxcd/flux2/internal/utils"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/transform"
 
 	"github.com/spf13/cobra"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -90,13 +91,18 @@ var createHelmReleaseCmd = &cobra.Command{
     --source=HelmRepository/podinfo \
     --chart=podinfo
 
+  # Create a HelmRelease using a source from a different namespace
+  flux create hr podinfo \
+    --namespace=default \
+    --source=HelmRepository/podinfo.flux-system \
+    --chart=podinfo
+
   # Create a HelmRelease definition on disk without applying it on the cluster
   flux create hr podinfo \
     --source=HelmRepository/podinfo \
     --chart=podinfo \
     --values=./values.yaml \
-    --export > podinfo-release.yaml
-`,
+    --export > podinfo-release.yaml`,
 	RunE: createHelmReleaseCmdRun,
 }
 
@@ -164,8 +170,9 @@ func createHelmReleaseCmdRun(cmd *cobra.Command, args []string) error {
 					Chart:   helmReleaseArgs.chart,
 					Version: helmReleaseArgs.chartVersion,
 					SourceRef: helmv2.CrossNamespaceObjectReference{
-						Kind: helmReleaseArgs.source.Kind,
-						Name: helmReleaseArgs.source.Name,
+						Kind:      helmReleaseArgs.source.Kind,
+						Name:      helmReleaseArgs.source.Name,
+						Namespace: helmReleaseArgs.source.Namespace,
 					},
 				},
 			},
@@ -198,7 +205,7 @@ func createHelmReleaseCmdRun(cmd *cobra.Command, args []string) error {
 			if valuesMap == nil {
 				valuesMap = jsonMap
 			} else {
-				valuesMap = utils.MergeMaps(valuesMap, jsonMap)
+				valuesMap = transform.MergeMaps(valuesMap, jsonMap)
 			}
 		}
 
@@ -218,7 +225,7 @@ func createHelmReleaseCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if createArgs.export {
-		return exportHelmRelease(helmRelease)
+		return printExport(exportHelmRelease(&helmRelease))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)

@@ -26,9 +26,11 @@ type Options struct {
 	Name              string
 	Namespace         string
 	Branch            string
+	Secret            string
 	TargetPath        string
 	ManifestFile      string
 	GitImplementation string
+	RecurseSubmodules bool
 }
 
 func MakeDefaultOptions() Options {
@@ -38,6 +40,7 @@ func MakeDefaultOptions() Options {
 		Name:              "flux-system",
 		Namespace:         "flux-system",
 		Branch:            "main",
+		Secret:            "flux-system",
 		ManifestFile:      "gotk-sync.yaml",
 		TargetPath:        "",
 		GitImplementation: "",

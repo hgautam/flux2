@@ -18,8 +18,10 @@ package main
 
 import (
 	"fmt"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var reconcileSourceGitCmd = &cobra.Command{
@@ -27,8 +29,7 @@ var reconcileSourceGitCmd = &cobra.Command{
 	Short: "Reconcile a GitRepository source",
 	Long:  `The reconcile source command triggers a reconciliation of a GitRepository resource and waits for it to finish.`,
 	Example: `  # Trigger a git pull for an existing source
-  flux reconcile source git podinfo
-`,
+  flux reconcile source git podinfo`,
 	RunE: reconcileCommand{
 		apiType: gitRepositoryType,
 		object:  gitRepositoryAdapter{&sourcev1.GitRepository{}},

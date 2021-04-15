@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	"github.com/spf13/cobra"
+
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 )
 
 var suspendHrCmd = &cobra.Command{
@@ -27,8 +28,7 @@ var suspendHrCmd = &cobra.Command{
 	Short:   "Suspend reconciliation of HelmRelease",
 	Long:    "The suspend command disables the reconciliation of a HelmRelease resource.",
 	Example: `  # Suspend reconciliation for an existing Helm release
-  flux suspend hr podinfo
-`,
+  flux suspend hr podinfo`,
 	RunE: suspendCommand{
 		apiType: helmReleaseType,
 		object:  &helmReleaseAdapter{&helmv2.HelmRelease{}},

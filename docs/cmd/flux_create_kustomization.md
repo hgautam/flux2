@@ -1,3 +1,6 @@
+---
+title: "flux create kustomization command"
+---
 ## flux create kustomization
 
 Create or update a Kustomization resource
@@ -15,7 +18,7 @@ flux create kustomization [name] [flags]
 ```
   # Create a Kustomization resource from a source at a given path
   flux create kustomization contour \
-    --source=contour \
+    --source=GitRepository/contour \
     --path="./examples/contour/" \
     --prune=true \
     --interval=10m \
@@ -27,7 +30,16 @@ flux create kustomization [name] [flags]
   # Create a Kustomization resource that depends on the previous one
   flux create kustomization webapp \
     --depends-on=contour \
-    --source=webapp \
+    --source=GitRepository/webapp \
+    --path="./deploy/overlays/dev" \
+    --prune=true \
+    --interval=5m \
+    --validation=client
+
+  # Create a Kustomization using a source from a different namespace
+  flux create kustomization podinfo \
+    --namespace=default \
+    --source=GitRepository/podinfo.flux-system \
     --path="./deploy/overlays/dev" \
     --prune=true \
     --interval=5m \
@@ -38,7 +50,6 @@ flux create kustomization [name] [flags]
     --source=Bucket/secrets \
     --prune=true \
     --interval=5m
-
 ```
 
 ### Options
@@ -53,7 +64,7 @@ flux create kustomization [name] [flags]
       --path safeRelativePath                    path to the directory containing a kustomization.yaml file (default ./)
       --prune                                    enable garbage collection
       --service-account string                   the name of the service account to impersonate when reconciling this Kustomization
-      --source kustomizationSource               source that contains the Kubernetes manifests in the format '[<kind>/]<name>', where kind must be one of: (GitRepository, Bucket), if kind is not specified it defaults to GitRepository
+      --source kustomizationSource               source that contains the Kubernetes manifests in the format '[<kind>/]<name>.<namespace>', where kind must be one of: (GitRepository, Bucket), if kind is not specified it defaults to GitRepository
       --target-namespace string                  overrides the namespace of all Kustomization objects reconciled by this Kustomization
       --validation string                        validate the manifests before applying them on the cluster, can be 'client' or 'server'
 ```
@@ -64,7 +75,7 @@ flux create kustomization [name] [flags]
       --context string      kubernetes context to use
       --export              export in YAML format to stdout
       --interval duration   source sync interval (default 1m0s)
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
       --label strings       set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
@@ -73,5 +84,5 @@ flux create kustomization [name] [flags]
 
 ### SEE ALSO
 
-* [flux create](flux_create.md)	 - Create or update sources and resources
+* [flux create](../flux_create/)	 - Create or update sources and resources
 

@@ -2,8 +2,7 @@ name: release
 
 on:
   push:
-    tags:
-      - '*'
+    tags: [ 'v*' ]
 
 jobs:
   goreleaser:
@@ -16,7 +15,27 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.15.x
+          go-version: 1.16.x
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v1
+        with:
+          platforms: all
+      - name: Setup Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          buildkitd-flags: "--debug"
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: fluxcdbot
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: fluxcdbot
+          password: ${{ secrets.DOCKER_FLUXCD_PASSWORD }}
       - name: Download release notes utility
         env:
           GH_REL_URL: https://github.com/buchanae/github-release-notes/releases/download/0.2.0/github-release-notes-linux-amd64-0.2.0.tar.gz
@@ -29,39 +48,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Kustomize
         uses: fluxcd/pkg//actions/kustomize@main
-      - name: Generate manifests tarball
+      - name: Generate manifests
         run: |
-          mkdir -p ./output
-          files=""
-
-          # build controllers
-          for controller in ./manifests/bases/*/; do
-              output_path="./output/$(basename $controller).yaml"
-              echo "building $controller to $output_path"
-
-              kustomize build $controller > $output_path
-              files+=" $(basename $output_path)"
-          done
-
-          # build rbac
-          rbac_path="./manifests/rbac"
-          rbac_output_path="./output/rbac.yaml"
-          echo "building $rbac_path to $rbac_output_path"
-          kustomize build $rbac_path > $rbac_output_path
-          files+=" $(basename $rbac_output_path)"
-
-          # build policies
-          policies_path="./manifests/policies"
-          policies_output_path="./output/policies.yaml"
-          echo "building $policies_path to $policies_output_path"
-          kustomize build $policies_path > $policies_output_path
-          files+=" $(basename $policies_output_path)"
-
-          # create tarball
-          cd ./output && tar -cvzf manifests.tar.gz $files
-      - name: Generate install manifest
-        run: |
+          make cmd/flux/manifests
+          ./manifests/scripts/bundle.sh "" ./output manifests.tar.gz
           kustomize build ./manifests/install > ./output/install.yaml
+      - name: Build CRDs
+        run: |
+          kustomize build manifests/crds > all-crds.yaml
+      - name: Generate OpenAPI JSON schemas from CRDs
+        uses: fluxcd/pkg//actions/crdjsonschema@main
+        with:
+          crd: all-crds.yaml
+          output: schemas
+      - name: Archive the OpenAPI JSON schemas
+        run: |
+          tar -czvf ./output/crd-schemas.tar.gz -C schemas .
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v1
         with:

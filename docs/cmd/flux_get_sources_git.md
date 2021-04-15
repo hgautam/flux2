@@ -1,3 +1,6 @@
+---
+title: "flux get sources git command"
+---
 ## flux get sources git
 
 Get GitRepository source statuses
@@ -18,7 +21,6 @@ flux get sources git [flags]
 
  # List Git repositories from all namespaces
   flux get sources git --all-namespaces
-
 ```
 
 ### Options
@@ -32,7 +34,7 @@ flux get sources git [flags]
 ```
   -A, --all-namespaces      list the requested object(s) across all namespaces
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -40,5 +42,5 @@ flux get sources git [flags]
 
 ### SEE ALSO
 
-* [flux get sources](flux_get_sources.md)	 - Get source statuses
+* [flux get sources](../flux_get_sources/)	 - Get source statuses
 

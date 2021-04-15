@@ -1,3 +1,6 @@
+---
+title: "flux delete source helm command"
+---
 ## flux delete source helm
 
 Delete a HelmRepository source
@@ -15,7 +18,6 @@ flux delete source helm [name] [flags]
 ```
   # Delete a Helm repository
   flux delete source helm podinfo
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux delete source helm [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
   -s, --silent              delete resource without asking for confirmation
       --timeout duration    timeout for this operation (default 5m0s)
@@ -37,5 +39,5 @@ flux delete source helm [name] [flags]
 
 ### SEE ALSO
 
-* [flux delete source](flux_delete_source.md)	 - Delete sources
+* [flux delete source](../flux_delete_source/)	 - Delete sources
 

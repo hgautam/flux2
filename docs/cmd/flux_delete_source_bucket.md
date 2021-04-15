@@ -1,3 +1,6 @@
+---
+title: "flux delete source bucket command"
+---
 ## flux delete source bucket
 
 Delete a Bucket source
@@ -15,7 +18,6 @@ flux delete source bucket [name] [flags]
 ```
   # Delete a Bucket source
   flux delete source bucket podinfo
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux delete source bucket [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
   -s, --silent              delete resource without asking for confirmation
       --timeout duration    timeout for this operation (default 5m0s)
@@ -37,5 +39,5 @@ flux delete source bucket [name] [flags]
 
 ### SEE ALSO
 
-* [flux delete source](flux_delete_source.md)	 - Delete sources
+* [flux delete source](../flux_delete_source/)	 - Delete sources
 

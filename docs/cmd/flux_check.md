@@ -1,3 +1,6 @@
+---
+title: "flux check command"
+---
 ## flux check
 
 Check requirements and installation
@@ -19,7 +22,6 @@ flux check [flags]
 
   # Run installation checks
   flux check
-
 ```
 
 ### Options
@@ -35,7 +37,7 @@ flux check [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -43,5 +45,5 @@ flux check [flags]
 
 ### SEE ALSO
 
-* [flux](flux.md)	 - Command line utility for assembling Kubernetes CD pipelines
+* [flux](../flux/)	 - Command line utility for assembling Kubernetes CD pipelines
 

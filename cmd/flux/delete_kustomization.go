@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 )
 
 var deleteKsCmd = &cobra.Command{
@@ -27,8 +28,7 @@ var deleteKsCmd = &cobra.Command{
 	Short:   "Delete a Kustomization resource",
 	Long:    "The delete kustomization command deletes the given Kustomization from the cluster.",
 	Example: `  # Delete a kustomization and the Kubernetes resources created by it
-  flux delete kustomization podinfo
-`,
+  flux delete kustomization podinfo`,
 	RunE: deleteCommand{
 		apiType: kustomizationType,
 		object:  universalAdapter{&kustomizev1.Kustomization{}},

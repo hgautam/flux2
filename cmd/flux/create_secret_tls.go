@@ -19,22 +19,21 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/fluxcd/flux2/pkg/manifestgen/sourcesecret"
 )
 
 var createSecretTLSCmd = &cobra.Command{
 	Use:   "tls [name]",
 	Short: "Create or update a Kubernetes secret with TLS certificates",
-	Long: `
-The create secret tls command generates a Kubernetes secret with certificates for use with TLS.`,
-	Example: `
-  # Create a TLS secret on disk and encrypt it with Mozilla SOPS.
+	Long:  `The create secret tls command generates a Kubernetes secret with certificates for use with TLS.`,
+	Example: ` # Create a TLS secret on disk and encrypt it with Mozilla SOPS.
   # Files are expected to be PEM-encoded.
   flux create secret tls certs \
     --namespace=my-namespace \
@@ -43,8 +42,7 @@ The create secret tls command generates a Kubernetes secret with certificates fo
     --export > certs.yaml
 
   sops --encrypt --encrypted-regex '^(data|stringData)$' \
-    --in-place certs.yaml
-`,
+    --in-place certs.yaml`,
 	RunE: createSecretTLSCmdRun,
 }
 
@@ -68,61 +66,48 @@ func init() {
 	createSecretCmd.AddCommand(createSecretTLSCmd)
 }
 
-func populateSecretTLS(secret *corev1.Secret, args secretTLSFlags) error {
-	if args.certFile != "" && args.keyFile != "" {
-		cert, err := ioutil.ReadFile(args.certFile)
-		if err != nil {
-			return fmt.Errorf("failed to read repository cert file '%s': %w", args.certFile, err)
-		}
-		secret.StringData["certFile"] = string(cert)
-
-		key, err := ioutil.ReadFile(args.keyFile)
-		if err != nil {
-			return fmt.Errorf("failed to read repository key file '%s': %w", args.keyFile, err)
-		}
-		secret.StringData["keyFile"] = string(key)
-	}
-
-	if args.caFile != "" {
-		ca, err := ioutil.ReadFile(args.caFile)
-		if err != nil {
-			return fmt.Errorf("failed to read repository CA file '%s': %w", args.caFile, err)
-		}
-		secret.StringData["caFile"] = string(ca)
-	}
-	return nil
-}
-
 func createSecretTLSCmdRun(cmd *cobra.Command, args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("secret name is required")
 	}
 	name := args[0]
-	secret, err := makeSecret(name)
+
+	labels, err := parseLabels()
 	if err != nil {
 		return err
 	}
 
-	if err = populateSecretTLS(&secret, secretTLSArgs); err != nil {
+	opts := sourcesecret.Options{
+		Name:         name,
+		Namespace:    rootArgs.namespace,
+		Labels:       labels,
+		CAFilePath:   secretTLSArgs.caFile,
+		CertFilePath: secretTLSArgs.certFile,
+		KeyFilePath:  secretTLSArgs.keyFile,
+	}
+	secret, err := sourcesecret.Generate(opts)
+	if err != nil {
 		return err
 	}
 
 	if createArgs.export {
-		return exportSecret(secret)
+		fmt.Println(secret.Content)
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
-
 	kubeClient, err := utils.KubeClient(rootArgs.kubeconfig, rootArgs.kubecontext)
 	if err != nil {
 		return err
 	}
-
-	if err := upsertSecret(ctx, kubeClient, secret); err != nil {
+	var s corev1.Secret
+	if err := yaml.Unmarshal([]byte(secret.Content), &s); err != nil {
 		return err
 	}
-	logger.Actionf("secret '%s' created in '%s' namespace", name, rootArgs.namespace)
+	if err := upsertSecret(ctx, kubeClient, s); err != nil {
+		return err
+	}
 
 	return nil
 }

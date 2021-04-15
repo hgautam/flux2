@@ -24,6 +24,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/fluxcd/pkg/apis/meta"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
@@ -33,34 +35,34 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/fluxcd/pkg/apis/meta"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/flux2/internal/flags"
 	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/fluxcd/flux2/pkg/manifestgen/sourcesecret"
 )
 
-type SourceGitFlags struct {
-	GitURL      string
-	GitBranch   string
-	GitTag      string
-	GitSemver   string
-	GitUsername string
-	GitPassword string
-
-	GitKeyAlgorithm   flags.PublicKeyAlgorithm
-	GitRSABits        flags.RSAKeyBits
-	GitECDSACurve     flags.ECDSACurve
-	GitSecretRef      string
-	GitImplementation flags.GitImplementation
+type sourceGitFlags struct {
+	url               string
+	branch            string
+	tag               string
+	semver            string
+	username          string
+	password          string
+	keyAlgorithm      flags.PublicKeyAlgorithm
+	keyRSABits        flags.RSAKeyBits
+	keyECDSACurve     flags.ECDSACurve
+	secretRef         string
+	gitImplementation flags.GitImplementation
+	caFile            string
+	privateKeyFile    string
+	recurseSubmodules bool
 }
 
 var createSourceGitCmd = &cobra.Command{
 	Use:   "git [name]",
 	Short: "Create or update a GitRepository source",
-	Long: `
-The create source git command generates a GitRepository resource and waits for it to sync.
+	Long: `The create source git command generates a GitRepository resource and waits for it to sync.
 For Git over SSH, host and SSH keys are automatically generated and stored in a Kubernetes secret.
 For private Git repositories, the basic authentication credentials are stored in a Kubernetes secret.`,
 	Example: `  # Create a source from a public Git repository master branch
@@ -68,7 +70,7 @@ For private Git repositories, the basic authentication credentials are stored in
     --url=https://github.com/stefanprodan/podinfo \
     --branch=master
 
-  # Create a source from a Git repository pinned to specific git tag
+  # Create a source for a Git repository pinned to specific git tag
   flux create source git podinfo \
     --url=https://github.com/stefanprodan/podinfo \
     --tag="3.2.3"
@@ -78,12 +80,12 @@ For private Git repositories, the basic authentication credentials are stored in
     --url=https://github.com/stefanprodan/podinfo \
     --tag-semver=">=3.2.0 <3.3.0"
 
-  # Create a source from a Git repository using SSH authentication
+  # Create a source for a Git repository using SSH authentication
   flux create source git podinfo \
     --url=ssh://git@github.com/stefanprodan/podinfo \
     --branch=master
 
-  # Create a source from a Git repository using SSH authentication and an
+  # Create a source for a Git repository using SSH authentication and an
   # ECDSA P-521 curve public key
   flux create source git podinfo \
     --url=ssh://git@github.com/stefanprodan/podinfo \
@@ -91,38 +93,49 @@ For private Git repositories, the basic authentication credentials are stored in
     --ssh-key-algorithm=ecdsa \
     --ssh-ecdsa-curve=p521
 
-  # Create a source from a Git repository using basic authentication
+  # Create a source for a Git repository using SSH authentication and a
+  #	passwordless private key from file
+  # The public SSH host key will still be gathered from the host
+  flux create source git podinfo \
+    --url=ssh://git@github.com/stefanprodan/podinfo \
+    --branch=master \
+    --private-key-file=./private.key
+
+  # Create a source for a Git repository using basic authentication
   flux create source git podinfo \
     --url=https://github.com/stefanprodan/podinfo \
     --username=username \
-    --password=password
-`,
+    --password=password`,
 	RunE: createSourceGitCmdRun,
 }
 
-var sourceArgs = NewSourceGitFlags()
+var sourceGitArgs = newSourceGitFlags()
 
 func init() {
-	createSourceGitCmd.Flags().StringVar(&sourceArgs.GitURL, "url", "", "git address, e.g. ssh://git@host/org/repository")
-	createSourceGitCmd.Flags().StringVar(&sourceArgs.GitBranch, "branch", "master", "git branch")
-	createSourceGitCmd.Flags().StringVar(&sourceArgs.GitTag, "tag", "", "git tag")
-	createSourceGitCmd.Flags().StringVar(&sourceArgs.GitSemver, "tag-semver", "", "git tag semver range")
-	createSourceGitCmd.Flags().StringVarP(&sourceArgs.GitUsername, "username", "u", "", "basic authentication username")
-	createSourceGitCmd.Flags().StringVarP(&sourceArgs.GitPassword, "password", "p", "", "basic authentication password")
-	createSourceGitCmd.Flags().Var(&sourceArgs.GitKeyAlgorithm, "ssh-key-algorithm", sourceArgs.GitKeyAlgorithm.Description())
-	createSourceGitCmd.Flags().Var(&sourceArgs.GitRSABits, "ssh-rsa-bits", sourceArgs.GitRSABits.Description())
-	createSourceGitCmd.Flags().Var(&sourceArgs.GitECDSACurve, "ssh-ecdsa-curve", sourceArgs.GitECDSACurve.Description())
-	createSourceGitCmd.Flags().StringVarP(&sourceArgs.GitSecretRef, "secret-ref", "", "", "the name of an existing secret containing SSH or basic credentials")
-	createSourceGitCmd.Flags().Var(&sourceArgs.GitImplementation, "git-implementation", sourceArgs.GitImplementation.Description())
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.url, "url", "", "git address, e.g. ssh://git@host/org/repository")
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.branch, "branch", "master", "git branch")
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.tag, "tag", "", "git tag")
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.semver, "tag-semver", "", "git tag semver range")
+	createSourceGitCmd.Flags().StringVarP(&sourceGitArgs.username, "username", "u", "", "basic authentication username")
+	createSourceGitCmd.Flags().StringVarP(&sourceGitArgs.password, "password", "p", "", "basic authentication password")
+	createSourceGitCmd.Flags().Var(&sourceGitArgs.keyAlgorithm, "ssh-key-algorithm", sourceGitArgs.keyAlgorithm.Description())
+	createSourceGitCmd.Flags().Var(&sourceGitArgs.keyRSABits, "ssh-rsa-bits", sourceGitArgs.keyRSABits.Description())
+	createSourceGitCmd.Flags().Var(&sourceGitArgs.keyECDSACurve, "ssh-ecdsa-curve", sourceGitArgs.keyECDSACurve.Description())
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.secretRef, "secret-ref", "", "the name of an existing secret containing SSH or basic credentials")
+	createSourceGitCmd.Flags().Var(&sourceGitArgs.gitImplementation, "git-implementation", sourceGitArgs.gitImplementation.Description())
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.caFile, "ca-file", "", "path to TLS CA file used for validating self-signed certificates")
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.privateKeyFile, "private-key-file", "", "path to a passwordless private key file used for authenticating to the Git SSH server")
+	createSourceGitCmd.Flags().BoolVar(&sourceGitArgs.recurseSubmodules, "recurse-submodules", false,
+		"when enabled, configures the GitRepository source to initialize and include Git submodules in the artifact it produces")
 
 	createSourceCmd.AddCommand(createSourceGitCmd)
 }
 
-func NewSourceGitFlags() SourceGitFlags {
-	return SourceGitFlags{
-		GitKeyAlgorithm: "rsa",
-		GitRSABits:      2048,
-		GitECDSACurve:   flags.ECDSACurve{Curve: elliptic.P384()},
+func newSourceGitFlags() sourceGitFlags {
+	return sourceGitFlags{
+		keyAlgorithm:  flags.PublicKeyAlgorithm(sourcesecret.RSAPrivateKeyAlgorithm),
+		keyRSABits:    2048,
+		keyECDSACurve: flags.ECDSACurve{Curve: elliptic.P384()},
 	}
 }
 
@@ -132,8 +145,24 @@ func createSourceGitCmdRun(cmd *cobra.Command, args []string) error {
 	}
 	name := args[0]
 
-	if sourceArgs.GitURL == "" {
+	if sourceGitArgs.url == "" {
 		return fmt.Errorf("url is required")
+	}
+
+	u, err := url.Parse(sourceGitArgs.url)
+	if err != nil {
+		return fmt.Errorf("git URL parse failed: %w", err)
+	}
+	if u.Scheme != "ssh" && u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("git URL scheme '%s' not supported, can be: ssh, http and https", u.Scheme)
+	}
+
+	if sourceGitArgs.caFile != "" && u.Scheme == "ssh" {
+		return fmt.Errorf("specifing a CA file is not supported for Git over SSH")
+	}
+
+	if sourceGitArgs.recurseSubmodules && sourceGitArgs.gitImplementation == sourcev1.LibGit2Implementation {
+		return fmt.Errorf("recurse submodules requires --git-implementation=%s", sourcev1.GoGitImplementation)
 	}
 
 	tmpDir, err := ioutil.TempDir("", name)
@@ -141,11 +170,6 @@ func createSourceGitCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
-
-	u, err := url.Parse(sourceArgs.GitURL)
-	if err != nil {
-		return fmt.Errorf("git URL parse failed: %w", err)
-	}
 
 	sourceLabels, err := parseLabels()
 	if err != nil {
@@ -159,33 +183,35 @@ func createSourceGitCmdRun(cmd *cobra.Command, args []string) error {
 			Labels:    sourceLabels,
 		},
 		Spec: sourcev1.GitRepositorySpec{
-			URL: sourceArgs.GitURL,
+			URL: sourceGitArgs.url,
 			Interval: metav1.Duration{
 				Duration: createArgs.interval,
 			},
-			Reference: &sourcev1.GitRepositoryRef{},
+			RecurseSubmodules: sourceGitArgs.recurseSubmodules,
+			Reference:         &sourcev1.GitRepositoryRef{},
 		},
 	}
 
-	if sourceArgs.GitImplementation != "" {
-		gitRepository.Spec.GitImplementation = sourceArgs.GitImplementation.String()
+	if sourceGitArgs.gitImplementation != "" {
+		gitRepository.Spec.GitImplementation = sourceGitArgs.gitImplementation.String()
 	}
 
-	if sourceArgs.GitSemver != "" {
-		gitRepository.Spec.Reference.SemVer = sourceArgs.GitSemver
-	} else if sourceArgs.GitTag != "" {
-		gitRepository.Spec.Reference.Tag = sourceArgs.GitTag
+	if sourceGitArgs.semver != "" {
+		gitRepository.Spec.Reference.SemVer = sourceGitArgs.semver
+	} else if sourceGitArgs.tag != "" {
+		gitRepository.Spec.Reference.Tag = sourceGitArgs.tag
 	} else {
-		gitRepository.Spec.Reference.Branch = sourceArgs.GitBranch
+		gitRepository.Spec.Reference.Branch = sourceGitArgs.branch
+	}
+
+	if sourceGitArgs.secretRef != "" {
+		gitRepository.Spec.SecretRef = &meta.LocalObjectReference{
+			Name: sourceGitArgs.secretRef,
+		}
 	}
 
 	if createArgs.export {
-		if sourceArgs.GitSecretRef != "" {
-			gitRepository.Spec.SecretRef = &meta.LocalObjectReference{
-				Name: sourceArgs.GitSecretRef,
-			}
-		}
-		return exportGit(gitRepository)
+		return printExport(exportGit(&gitRepository))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
@@ -196,82 +222,59 @@ func createSourceGitCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	withAuth := false
-	// TODO(hidde): move all auth prep to separate func?
-	if sourceArgs.GitSecretRef != "" {
-		withAuth = true
-	} else if u.Scheme == "ssh" {
-		logger.Generatef("generating deploy key pair")
-		pair, err := generateKeyPair(ctx, sourceArgs.GitKeyAlgorithm, sourceArgs.GitRSABits, sourceArgs.GitECDSACurve)
-		if err != nil {
-			return err
-		}
-
-		logger.Successf("deploy key: %s", pair.PublicKey)
-		prompt := promptui.Prompt{
-			Label:     "Have you added the deploy key to your repository",
-			IsConfirm: true,
-		}
-		if _, err := prompt.Run(); err != nil {
-			return fmt.Errorf("aborting")
-		}
-
-		logger.Actionf("collecting preferred public key from SSH server")
-		hostKey, err := scanHostKey(ctx, u)
-		if err != nil {
-			return err
-		}
-		logger.Successf("collected public key from SSH server:\n%s", hostKey)
-
-		logger.Actionf("applying secret with keys")
-		secret := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: rootArgs.namespace,
-				Labels:    sourceLabels,
-			},
-			StringData: map[string]string{
-				"identity":     string(pair.PrivateKey),
-				"identity.pub": string(pair.PublicKey),
-				"known_hosts":  string(hostKey),
-			},
-		}
-		if err := upsertSecret(ctx, kubeClient, secret); err != nil {
-			return err
-		}
-		withAuth = true
-	} else if sourceArgs.GitUsername != "" && sourceArgs.GitPassword != "" {
-		logger.Actionf("applying secret with basic auth credentials")
-		secret := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: rootArgs.namespace,
-				Labels:    sourceLabels,
-			},
-			StringData: map[string]string{
-				"username": sourceArgs.GitUsername,
-				"password": sourceArgs.GitPassword,
-			},
-		}
-		if err := upsertSecret(ctx, kubeClient, secret); err != nil {
-			return err
-		}
-		withAuth = true
-	}
-
-	if withAuth {
-		logger.Successf("authentication configured")
-	}
-
 	logger.Generatef("generating GitRepository source")
-
-	if withAuth {
-		secretName := name
-		if sourceArgs.GitSecretRef != "" {
-			secretName = sourceArgs.GitSecretRef
+	if sourceGitArgs.secretRef == "" {
+		secretOpts := sourcesecret.Options{
+			Name:         name,
+			Namespace:    rootArgs.namespace,
+			ManifestFile: sourcesecret.MakeDefaultOptions().ManifestFile,
 		}
-		gitRepository.Spec.SecretRef = &meta.LocalObjectReference{
-			Name: secretName,
+		switch u.Scheme {
+		case "ssh":
+			secretOpts.SSHHostname = u.Host
+			secretOpts.PrivateKeyPath = sourceGitArgs.privateKeyFile
+			secretOpts.PrivateKeyAlgorithm = sourcesecret.PrivateKeyAlgorithm(sourceGitArgs.keyAlgorithm)
+			secretOpts.RSAKeyBits = int(sourceGitArgs.keyRSABits)
+			secretOpts.ECDSACurve = sourceGitArgs.keyECDSACurve.Curve
+		case "https":
+			secretOpts.Username = sourceGitArgs.username
+			secretOpts.Password = sourceGitArgs.password
+			secretOpts.CAFilePath = sourceGitArgs.caFile
+		case "http":
+			logger.Warningf("insecure configuration: credentials configured for an HTTP URL")
+			secretOpts.Username = sourceGitArgs.username
+			secretOpts.Password = sourceGitArgs.password
+		}
+		secret, err := sourcesecret.Generate(secretOpts)
+		if err != nil {
+			return err
+		}
+		var s corev1.Secret
+		if err = yaml.Unmarshal([]byte(secret.Content), &s); err != nil {
+			return err
+		}
+		if len(s.StringData) > 0 {
+			if hk, ok := s.StringData[sourcesecret.KnownHostsSecretKey]; ok {
+				logger.Successf("collected public key from SSH server:\n%s", hk)
+			}
+			if ppk, ok := s.StringData[sourcesecret.PublicKeySecretKey]; ok {
+				logger.Generatef("deploy key: %s", ppk)
+				prompt := promptui.Prompt{
+					Label:     "Have you added the deploy key to your repository",
+					IsConfirm: true,
+				}
+				if _, err := prompt.Run(); err != nil {
+					return fmt.Errorf("aborting")
+				}
+			}
+			logger.Actionf("applying secret with repository credentials")
+			if err := upsertSecret(ctx, kubeClient, s); err != nil {
+				return err
+			}
+			gitRepository.Spec.SecretRef = &meta.LocalObjectReference{
+				Name: s.Name,
+			}
+			logger.Successf("authentication configured")
 		}
 	}
 

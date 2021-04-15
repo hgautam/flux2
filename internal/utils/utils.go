@@ -21,9 +21,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/fluxcd/flux2/pkg/manifestgen/install"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,26 +29,26 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/olekukonko/tablewriter"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apiruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/kustomize/api/filesys"
-	"sigs.k8s.io/kustomize/api/k8sdeps/kunstruct"
-	"sigs.k8s.io/kustomize/api/konfig"
-	kustypes "sigs.k8s.io/kustomize/api/types"
-	"sigs.k8s.io/yaml"
-
 	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	imageautov1 "github.com/fluxcd/image-automation-controller/api/v1alpha1"
 	imagereflectv1 "github.com/fluxcd/image-reflector-controller/api/v1alpha1"
 	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 	notificationv1 "github.com/fluxcd/notification-controller/api/v1beta1"
 	"github.com/fluxcd/pkg/runtime/dependency"
+	"github.com/fluxcd/pkg/version"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/olekukonko/tablewriter"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/fluxcd/flux2/pkg/manifestgen/install"
 )
 
 type Utils struct {
@@ -163,8 +161,11 @@ func KubeClient(kubeConfigPath string, kubeContext string) (client.Client, error
 	}
 
 	scheme := apiruntime.NewScheme()
+	_ = apiextensionsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = rbacv1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
 	_ = sourcev1.AddToScheme(scheme)
 	_ = kustomizev1.AddToScheme(scheme)
 	_ = helmv2.AddToScheme(scheme)
@@ -197,41 +198,6 @@ func SplitKubeConfigPath(path string) []string {
 	return strings.Split(path, sep)
 }
 
-func WriteFile(content, filename string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = io.WriteString(file, content)
-	if err != nil {
-		return err
-	}
-
-	return file.Sync()
-}
-
-func CopyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
-}
-
 func ContainsItemString(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {
@@ -250,14 +216,32 @@ func ContainsEqualFoldItemString(s []string, e string) (string, bool) {
 	return "", false
 }
 
-func ParseObjectKindName(input string) (string, string) {
-	kind := ""
-	name := input
+// ParseObjectKindName extracts the kind and name of a resource
+// based on the '<kind>/<name>' format
+func ParseObjectKindName(input string) (kind, name string) {
+	name = input
 	parts := strings.Split(input, "/")
 	if len(parts) == 2 {
 		kind, name = parts[0], parts[1]
 	}
 	return kind, name
+}
+
+// ParseObjectKindNameNamespace extracts the kind, name and namespace of a resource
+// based on the '<kind>/<name>.<namespace>' format
+func ParseObjectKindNameNamespace(input string) (kind, name, namespace string) {
+	name = input
+	parts := strings.Split(input, "/")
+	if len(parts) == 2 {
+		kind, name = parts[0], parts[1]
+	}
+
+	if nn := strings.Split(name, "."); len(nn) > 1 {
+		name = strings.Join(nn[:len(nn)-1], ".")
+		namespace = nn[len(nn)-1]
+	}
+
+	return kind, name, namespace
 }
 
 func MakeDependsOn(deps []string) []dependency.CrossNamespaceDependencyReference {
@@ -278,90 +262,6 @@ func MakeDependsOn(deps []string) []dependency.CrossNamespaceDependencyReference
 		})
 	}
 	return refs
-}
-
-// GenerateKustomizationYaml is the equivalent of running
-// 'kustomize create --autodetect' in the specified dir
-func GenerateKustomizationYaml(dirPath string) error {
-	fs := filesys.MakeFsOnDisk()
-	kfile := filepath.Join(dirPath, "kustomization.yaml")
-
-	scan := func(base string) ([]string, error) {
-		var paths []string
-		uf := kunstruct.NewKunstructuredFactoryImpl()
-		err := fs.Walk(base, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if path == base {
-				return nil
-			}
-			if info.IsDir() {
-				// If a sub-directory contains an existing kustomization file add the
-				// directory as a resource and do not decend into it.
-				for _, kfilename := range konfig.RecognizedKustomizationFileNames() {
-					if fs.Exists(filepath.Join(path, kfilename)) {
-						paths = append(paths, path)
-						return filepath.SkipDir
-					}
-				}
-				return nil
-			}
-			fContents, err := fs.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			if _, err := uf.SliceFromBytes(fContents); err != nil {
-				return nil
-			}
-			paths = append(paths, path)
-			return nil
-		})
-		return paths, err
-	}
-
-	if _, err := os.Stat(kfile); err != nil {
-		abs, err := filepath.Abs(dirPath)
-		if err != nil {
-			return err
-		}
-
-		files, err := scan(abs)
-		if err != nil {
-			return err
-		}
-
-		f, err := fs.Create(kfile)
-		if err != nil {
-			return err
-		}
-		f.Close()
-
-		kus := kustypes.Kustomization{
-			TypeMeta: kustypes.TypeMeta{
-				APIVersion: kustypes.KustomizationVersion,
-				Kind:       kustypes.KustomizationKind,
-			},
-		}
-
-		var resources []string
-		for _, file := range files {
-			relP, err := filepath.Rel(abs, file)
-			if err != nil {
-				return err
-			}
-			resources = append(resources, relP)
-		}
-
-		kus.Resources = resources
-		kd, err := yaml.Marshal(kus)
-		if err != nil {
-			return err
-		}
-
-		return ioutil.WriteFile(kfile, kd, os.ModePerm)
-	}
-	return nil
 }
 
 func PrintTable(writer io.Writer, header []string, rows [][]string) {
@@ -394,23 +294,22 @@ func ValidateComponents(components []string) error {
 	return nil
 }
 
-// TODO(stefan): move this to fluxcd/pkg
-// taken from: https://github.com/fluxcd/helm-controller/blob/main/internal/util/util.go
-func MergeMaps(a, b map[string]interface{}) map[string]interface{} {
-	out := make(map[string]interface{}, len(a))
-	for k, v := range a {
-		out[k] = v
+// CompatibleVersion returns if the provided binary version is compatible
+// with the given target version. At present, this is true if the target
+// version is equal to the MINOR range of the binary, or if the binary
+// version is a prerelease.
+func CompatibleVersion(binary, target string) bool {
+	binSv, err := version.ParseVersion(binary)
+	if err != nil {
+		return false
 	}
-	for k, v := range b {
-		if v, ok := v.(map[string]interface{}); ok {
-			if bv, ok := out[k]; ok {
-				if bv, ok := bv.(map[string]interface{}); ok {
-					out[k] = MergeMaps(bv, v)
-					continue
-				}
-			}
-		}
-		out[k] = v
+	// Assume prerelease builds are compatible.
+	if binSv.Prerelease() != "" {
+		return true
 	}
-	return out
+	targetSv, err := version.ParseVersion(target)
+	if err != nil {
+		return false
+	}
+	return binSv.Major() == targetSv.Major() && binSv.Minor() == targetSv.Minor()
 }

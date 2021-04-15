@@ -1,3 +1,6 @@
+---
+title: "flux get alert-providers command"
+---
 ## flux get alert-providers
 
 Get Provider statuses
@@ -15,7 +18,6 @@ flux get alert-providers [flags]
 ```
   # List all Providers and their status
   flux get alert-providers
-
 ```
 
 ### Options
@@ -29,7 +31,7 @@ flux get alert-providers [flags]
 ```
   -A, --all-namespaces      list the requested object(s) across all namespaces
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -37,5 +39,5 @@ flux get alert-providers [flags]
 
 ### SEE ALSO
 
-* [flux get](flux_get.md)	 - Get sources and resources
+* [flux get](../flux_get/)	 - Get the resources and their status
 

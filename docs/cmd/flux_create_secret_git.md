@@ -1,9 +1,11 @@
+---
+title: "flux create secret git command"
+---
 ## flux create secret git
 
 Create or update a Kubernetes secret for Git authentication
 
 ### Synopsis
-
 
 The create secret git command generates a Kubernetes secret with Git credentials.
 For Git over SSH, the host and SSH keys are automatically generated and stored in the secret.
@@ -22,6 +24,12 @@ flux create secret git [name] [flags]
     --url=ssh://git@github.com/stefanprodan/podinfo \
     --ssh-key-algorithm=ecdsa \
     --ssh-ecdsa-curve=p521
+
+  # Create a Git SSH authentication secret with a passwordless private key from file
+  # The public SSH host key will still be gathered from the host
+  flux create secret git podinfo-auth \
+    --url=ssh://git@github.com/stefanprodan/podinfo \
+    --private-key-file=./private.key
 
   # Create a secret for a Git repository using basic authentication
   flux create secret git podinfo-auth \
@@ -44,14 +52,15 @@ flux create secret git [name] [flags]
 
   sops --encrypt --encrypted-regex '^(data|stringData)$' \
     --in-place podinfo-auth.yaml
-
 ```
 
 ### Options
 
 ```
+      --ca-file string                         path to TLS CA file used for validating self-signed certificates
   -h, --help                                   help for git
   -p, --password string                        basic authentication password
+      --private-key-file string                path to a passwordless private key file used for authenticating to the Git SSH server
       --ssh-ecdsa-curve ecdsaCurve             SSH ECDSA public key curve (p256, p384, p521) (default p384)
       --ssh-key-algorithm publicKeyAlgorithm   SSH public key algorithm (rsa, ecdsa, ed25519) (default rsa)
       --ssh-rsa-bits rsaKeyBits                SSH RSA public key bit size (multiplies of 8) (default 2048)
@@ -65,7 +74,7 @@ flux create secret git [name] [flags]
       --context string      kubernetes context to use
       --export              export in YAML format to stdout
       --interval duration   source sync interval (default 1m0s)
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
       --label strings       set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
@@ -74,5 +83,5 @@ flux create secret git [name] [flags]
 
 ### SEE ALSO
 
-* [flux create secret](flux_create_secret.md)	 - Create or update Kubernetes secrets
+* [flux create secret](../flux_create_secret/)	 - Create or update Kubernetes secrets
 

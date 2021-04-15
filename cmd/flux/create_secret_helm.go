@@ -21,17 +21,18 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/fluxcd/flux2/pkg/manifestgen/sourcesecret"
 )
 
 var createSecretHelmCmd = &cobra.Command{
 	Use:   "helm [name]",
 	Short: "Create or update a Kubernetes secret for Helm repository authentication",
-	Long: `
-The create secret helm command generates a Kubernetes secret with basic authentication credentials.`,
-	Example: `    # Create a Helm authentication secret on disk and encrypt it with Mozilla SOPS
-
+	Long:  `The create secret helm command generates a Kubernetes secret with basic authentication credentials.`,
+	Example: ` # Create a Helm authentication secret on disk and encrypt it with Mozilla SOPS
   flux create secret helm repo-auth \
     --namespace=my-namespace \
     --username=my-username \
@@ -41,14 +42,13 @@ The create secret helm command generates a Kubernetes secret with basic authenti
   sops --encrypt --encrypted-regex '^(data|stringData)$' \
     --in-place repo-auth.yaml
 
-  # Create an authentication secret using a custom TLS cert
+  # Create a Helm authentication secret using a custom TLS cert
   flux create secret helm repo-auth \
     --username=username \
     --password=password \
     --cert-file=./cert.crt \
     --key-file=./key.crt \
-    --ca-file=./ca.crt
-`,
+    --ca-file=./ca.crt`,
 	RunE: createSecretHelmCmdRun,
 }
 
@@ -72,36 +72,45 @@ func createSecretHelmCmdRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("secret name is required")
 	}
 	name := args[0]
-	secret, err := makeSecret(name)
+
+	labels, err := parseLabels()
 	if err != nil {
 		return err
 	}
 
-	if secretHelmArgs.username != "" && secretHelmArgs.password != "" {
-		secret.StringData["username"] = secretHelmArgs.username
-		secret.StringData["password"] = secretHelmArgs.password
+	opts := sourcesecret.Options{
+		Name:         name,
+		Namespace:    rootArgs.namespace,
+		Labels:       labels,
+		Username:     secretHelmArgs.username,
+		Password:     secretHelmArgs.password,
+		CAFilePath:   secretHelmArgs.caFile,
+		CertFilePath: secretHelmArgs.certFile,
+		KeyFilePath:  secretHelmArgs.keyFile,
 	}
-
-	if err = populateSecretTLS(&secret, secretHelmArgs.secretTLSFlags); err != nil {
+	secret, err := sourcesecret.Generate(opts)
+	if err != nil {
 		return err
 	}
 
 	if createArgs.export {
-		return exportSecret(secret)
+		fmt.Println(secret.Content)
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
-
 	kubeClient, err := utils.KubeClient(rootArgs.kubeconfig, rootArgs.kubecontext)
 	if err != nil {
 		return err
 	}
-
-	if err := upsertSecret(ctx, kubeClient, secret); err != nil {
+	var s corev1.Secret
+	if err := yaml.Unmarshal([]byte(secret.Content), &s); err != nil {
 		return err
 	}
-	logger.Actionf("secret '%s' created in '%s' namespace", name, rootArgs.namespace)
+	if err := upsertSecret(ctx, kubeClient, s); err != nil {
+		return err
+	}
 
 	return nil
 }

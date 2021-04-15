@@ -1,3 +1,6 @@
+---
+title: "flux delete helmrelease command"
+---
 ## flux delete helmrelease
 
 Delete a HelmRelease resource
@@ -15,7 +18,6 @@ flux delete helmrelease [name] [flags]
 ```
   # Delete a Helm release and the Kubernetes resources created by it
   flux delete hr podinfo
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux delete helmrelease [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
   -s, --silent              delete resource without asking for confirmation
       --timeout duration    timeout for this operation (default 5m0s)
@@ -37,5 +39,5 @@ flux delete helmrelease [name] [flags]
 
 ### SEE ALSO
 
-* [flux delete](flux_delete.md)	 - Delete sources and resources
+* [flux delete](../flux_delete/)	 - Delete sources and resources
 

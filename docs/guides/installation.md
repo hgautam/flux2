@@ -31,6 +31,11 @@ are also supported with their own sub-commands.
 Binaries for macOS, Windows and Linux AMD64/ARM are available for download on the
 [release page](https://github.com/fluxcd/flux2/releases).
 
+A container image with `kubectl` and `flux` is available on DockerHub and GitHub:
+
+* `docker.io/fluxcd/flux-cli:<version>`
+* `ghcr.io/fluxcd/flux-cli:<version>`
+
 Verify that your cluster satisfies the prerequisites with:
 
 ```sh
@@ -42,33 +47,61 @@ flux check --pre
 Using the `flux bootstrap` command you can install Flux on a
 Kubernetes cluster and configure it to manage itself from a Git
 repository.
-
-The bootstrap creates a Git repository if one doesn't exist and
-commits the Flux components manifests to the main branch. Then it
-configures the target cluster to synchronize with that repository by
-setting up SSH deploy keys.
-
 If the Flux components are present on the cluster, the bootstrap
 command will perform an upgrade if needed. The bootstrap is
 idempotent, it's safe to run the command as many times as you want.
 
-You can choose what components to install and for which cluster with:
+The Flux component images are published to DockerHub and GitHub Container Registry
+as [multi-arch container images](https://docs.docker.com/docker-for-mac/multi-arch/)
+with support for Linux `amd64`, `arm64` and `armv7` (e.g. 32bit Raspberry Pi)
+architectures.
+
+If your Git provider is **GitHub**, **GitLab** or **Azure DevOps** please follow the specific bootstrap procedure:
+
+* [GitHub.com and GitHub Enterprise](#github-and-github-enterprise)
+* [GitLab.com and GitLab Enterprise](#gitlab-and-gitlab-enterprise)
+* [Azure DevOps](../use-cases/azure.md#flux-installation-for-azure-devops)
+
+### Generic Git Server
+
+The `bootstrap git` command takes an existing Git repository, clones it and
+commits the Flux components manifests to the specified branch. Then it
+configures the target cluster to synchronize with that repository.
+
+Run bootstrap for a Git repository and authenticate with your SSH agent:
 
 ```sh
-flux bootstrap <GIT-PROVIDER> \
-  --components=source-controller,kustomize-controller,helm-controller,notification-controller \
-  --components-extra=image-reflector-controller,image-automation-controller \
-  --path=clusters/my-cluster \
-  --version=latest
+flux bootstrap git \
+  --url=ssh://git@<host>/<org>/<repository> \
+  --branch=<my-branch> \
+  --path=clusters/my-cluster
 ```
 
-!!! hint "Multi-arch images"
-    The component images are published as [multi-arch container images](https://docs.docker.com/docker-for-mac/multi-arch/)
-    with support for Linux `amd64`, `arm64` and `armv7` (e.g. 32bit Raspberry Pi)
-    architectures.
+The above command will generate a SSH key (defaults to RSA 2048 but can be changed with `--ssh-key-algorithm`),
+and it will prompt you to add the SSH public key as a deploy key to your repository.
 
-If you wish to install a specific version, use the Flux
-[release tag](https://github.com/fluxcd/flux2/releases) e.g. `--version=v0.2.0`.
+If you want to use your own SSH key, you can provide a **passwordless** private key using
+`--private-key-file=<path/to/private.key>`.
+This option can also be used if no SSH agent is available on your machine.
+
+!!! hint "Bootstrap options"
+    There are many options available when bootstrapping Flux, such as installing a subset of Flux components,
+    setting the Kubernetes context, changing the Git author name and email, enabling Git submodules, and more.
+    To list all the available options run `flux bootstrap git --help`.
+
+If your Git server doesn't support SSH, you can run bootstrap for Git over HTTPS:
+
+```sh
+flux bootstrap git \
+  --url=https://<host>/<org>/<repository> \
+  --username=<my-username> \
+  --password=<my-password> \
+  --token-auth=true \
+  --path=clusters/my-cluster
+```
+
+If your Git server uses a self-signed TLS certificate, you can specify the CA file with
+`--ca-file=<path/to/ca.crt>`.
 
 With `--path` you can configure the directory which will be used to reconcile the target cluster.
 To control multiple clusters from the same Git repository, you have to set a unique path per
@@ -81,16 +114,12 @@ cluster e.g. `clusters/staging` and `clusters/production`:
 │       ├── gotk-components.yaml
 │       ├── gotk-sync.yaml
 │       └── kustomization.yaml
-└── production-cluster # <- path=clusters/production
+└── production # <- path=clusters/production
     └── flux-system
 ```
 
 After running bootstrap you can place Kubernetes YAMLs inside a dir under path
 e.g. `clusters/staging/my-app`, and Flux will reconcile them on your cluster.
-
-!!! hint "Change the default branch"
-    If you wish to change the branch to something else than main, create the repository manually,
-    push a branch to origin and then use `flux bootstrap <GIT-PROVIDER> --branch=your-branch`.
 
 For examples on how you can structure your Git repository see:
 
@@ -98,6 +127,11 @@ For examples on how you can structure your Git repository see:
 * [flux2-multi-tenancy](https://github.com/fluxcd/flux2-multi-tenancy)
 
 ### GitHub and GitHub Enterprise
+
+The `bootstrap github` command creates a GitHub repository if one doesn't exist and
+commits the Flux components manifests to specified branch. Then it
+configures the target cluster to synchronize with that repository by
+setting up a SSH deploy key or by using token-based authentication.
 
 Generate a [personal access token](https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line)
 that can create repositories by checking all permissions under `repo`.
@@ -163,6 +197,11 @@ flux bootstrap github \
 
 ### GitLab and GitLab Enterprise
 
+The `bootstrap gitlab` command creates a GitLab repository if one doesn't exist and
+commits the Flux components manifests to specified branch. Then it
+configures the target cluster to synchronize with that repository by
+setting up a SSH deploy key or by using token-based authentication.
+
 Generate a [personal access token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html)
 that grants complete read/write access to the GitLab API.
 
@@ -222,40 +261,32 @@ flux bootstrap gitlab \
   --path=clusters/my-cluster
 ```
 
-### Generic Git Server
+### Air-gapped Environments
 
-For other Git providers such as Bitbucket, Gogs, Gitea, Azure DevOps, etc you can manually setup the repository and the deploy key.
+To bootstrap Flux on air-gapped environments without access to github.com and ghcr.io, first you'll need 
+to download the `flux` binary, and the container images from a computer with access to internet.
 
-Create a Git repository and clone it locally:
+List all container images:
 
-```sh
-git clone ssh://<host>/<org>/my-repository
-cd my-repository
+```console
+$ flux install --export | grep ghcr.io
+
+image: ghcr.io/fluxcd/helm-controller:v0.8.0
+image: ghcr.io/fluxcd/kustomize-controller:v0.9.0
+image: ghcr.io/fluxcd/notification-controller:v0.9.0
+image: ghcr.io/fluxcd/source-controller:v0.9.0
 ```
 
-Create a directory inside the repository:
+Pull the images locally and push them to your container registry:
 
 ```sh
-mkdir -p ./clusters/my-cluster/flux-system
+docker pull ghcr.io/fluxcd/source-controller:v0.9.0
+docker tag ghcr.io/fluxcd/source-controller:v0.9.0 registry.internal/fluxcd/source-controller:v0.9.0
+docker push registry.internal/fluxcd/source-controller:v0.9.0
 ```
 
-Generate the Flux manifests with:
-
-```sh
-flux install --version=latest \
-  --export > ./clusters/my-cluster/flux-system/gotk-components.yaml
-```
-
-If your cluster must pull images from a private container registry, first you should pull
-the toolkit images from GitHub Container Registry and push them to your registry, for example:
-
-```sh
-docker pull ghcr.io/fluxcd/source-controller:v0.2.0
-docker tag ghcr.io/fluxcd/source-controller:v0.2.0 registry.internal/fluxcd/source-controller:v0.2.0
-docker push registry.internal/fluxcd/source-controller:v0.2.0
-```
-
-Create the pull secret in the `flux-system` namespace:
+Copy `flux` binary to a computer with access to your air-gapped cluster,
+and create the pull secret in the `flux-system` namespace:
 
 ```sh
 kubectl create ns flux-system
@@ -265,128 +296,19 @@ kubectl -n flux-system create secret generic regcred \
     --type=kubernetes.io/dockerconfigjson
 ```
 
-Set your registry domain, and the pull secret when generating the manifests:
+Finally, bootstrap Flux using the images from your private registry:
 
 ```sh
-flux install --version=latest \
+flux bootstrap <GIT-PROVIDER> \
   --registry=registry.internal/fluxcd \
   --image-pull-secret=regcred \
-  --export > ./clusters/my-cluster/flux-system/gotk-components.yaml
+  --hostname=my-git-server.internal
 ```
 
-Commit and push the manifest to the master branch:
-
-```sh
-git add -A && git commit -m "add components" && git push
-```
-
-Apply the manifests on your cluster:
-
-```sh
-kubectl apply -f ./clusters/my-cluster/flux-system/gotk-components.yaml
-```
-
-Verify that the controllers have started:
-
-```sh
-flux check
-```
-
-Create a `GitRepository` object on your cluster by specifying the SSH address of your repo:
-
-```sh
-flux create source git flux-system \
-  --url=ssh://git@<host>/<org>/<repository> \
-  --ssh-key-algorithm=ecdsa \
-  --ssh-ecdsa-curve=p521 \
-  --branch=master \
-  --interval=1m
-```
-
-You will be prompted to add a deploy key to your repository.
-If you don't specify the SSH algorithm, then `flux` will generate an RSA 2048 bits key.
-
-!!! hint "Azure DevOps"
-    Azure DevOps requires a non-default Git implementation (`libgit2`) to be enabled, so that the Git v2 protocol is supported.
-    Note that this implementation does not support shallow cloning, and it is therefore advised to only resort to this option if a
-    connection fails with the default configuration.
-
-    If you are using Azure DevOps you need to specify a different Git implementation than the default:
-    
-    ```sh
-    flux create source git flux-system \
-      --git-implementation=libgit2 \
-      --url=ssh://git@ssh.dev.azure.com/v3/<org>/<project>/<repository> \
-      --branch=master \
-      --interval=1m
-    ```
-
-    Note that unlike `git`, Flux does not support the
-    ["shorter" scp-like syntax for the SSH protocol](https://git-scm.com/book/en/v2/Git-on-the-Server-The-Protocols#_the_ssh_protocol)
-    (e.g. `ssh.dev.azure.com:v3`).
-    Use the [RFC 3986 compatible syntax](https://tools.ietf.org/html/rfc3986#section-3) instead: `ssh.dev.azure.com/v3`.
-
-    If you wish to use Git over HTTPS, then generated a personal access token and supply it as the password:
-
-    ```sh
-    flux create source git flux-system \
-      --git-implementation=libgit2 \
-      --url=https://dev.azure.com/<org>/<project>/_git/<repository> \
-      --branch=master \
-      --username=git \
-      --password=token \
-      --interval=1m
-    ```
-
-    Please consult the [Azure DevOps documentation](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
-    on how to generate personal access tokens for Git repositories.
-
-If your Git server supports basic auth, you can set the URL to HTTPS and specify the credentials with:
-
-```sh
-flux create source git flux-system \
-  --url=https://<host>/<org>/my-repository \
-  --username=my-username \
-  --password=my-password \
-  --branch=master \
-  --interval=1m
-```
-
-Create a `Kustomization` object on your cluster:
-
-```sh
-flux create kustomization flux-system \
-  --source=flux-system \
-  --path="./clusters/my-cluster" \
-  --prune=true \
-  --interval=10m
-```
-
-Export both objects, generate a `kustomization.yaml`, commit and push the manifests to Git:
-
-```sh
-flux export source git flux-system \
-  > ./clusters/my-cluster/flux-system/gotk-sync.yaml
-
-flux export kustomization flux-system \
-  >> ./clusters/my-cluster/flux-system/gotk-sync.yaml
-
-cd ./clusters/my-cluster/flux-system && kustomize create --autodetect
-
-git add -A && git commit -m "add sync manifests" && git push
-```
-
-To upgrade the Flux components to a newer version, run the install command and commit the changes:
-
-```sh
-flux install --version=latest \
-  --export > ./clusters/my-cluster/flux-system/gotk-components.yaml
-
-git add -A && git commit -m "update flux" && git push
-```
-
-The source-controller will pull the changes on the cluster, then the kustomize-controller
-will perform a rolling update of all Flux components including itself.
+Note that when running `flux bootstrap` without specifying a `--version`,
+the CLI will use the manifests embedded in its binary instead of downloading
+them from GitHub. You can determine which version you'll be installing,
+with `flux --version`.
 
 ## Bootstrap with Terraform
 
@@ -480,7 +402,7 @@ Flux will detect the change and will update itself on the production cluster.
 For testing purposes you can install Flux without storing its manifests in a Git repository:
 
 ```sh
-flux install --arch=amd64
+flux install
 ```
 
 Or using kubectl:
@@ -588,11 +510,10 @@ kubectl annotate --overwrite gitrepository/flux-system reconcile.fluxcd.io/reque
 If you've installed Flux directly on the cluster, then rerun the install command:
 
 ```sh
-flux install --version=latest
+flux install
 ```
 
-The above command will download the latest manifests from
-[GitHub](https://github.com/fluxcd/flux2/releases) and it will apply them on your cluster.
+The above command will  apply the new manifests on your cluster.
 You can verify that the controllers have been upgraded to the latest version with `flux check`.
 
 If you've installed Flux directly on the cluster with kubectl,
@@ -604,11 +525,28 @@ kustomize build https://github.com/fluxcd/flux2/manifests/install?ref=main | kub
 
 ## Uninstall
 
-You can uninstall the Flux components with:
+You can uninstall Flux with:
 
 ```sh
-flux uninstall --crds
+flux uninstall --namespace=flux-system
 ```
 
-The above command will delete the custom resources definitions, the
-controllers, and the namespace where they were installed.
+The above command performs the following operations:
+
+- deletes Flux components (deployments and services)
+- deletes Flux network policies
+- deletes Flux RBAC (service accounts, cluster roles and cluster role bindings)
+- removes the Kubernetes finalizers from Flux custom resources
+- deletes Flux custom resource definitions and custom resources
+- deletes the namespace where Flux was installed
+
+If you've installed Flux in a namespace that you wish to preserve, you
+can skip the namespace deletion with:
+
+```sh
+flux uninstall --namespace=infra --keep-namespace
+```
+
+!!! hint
+    Note that the `uninstall` command will not remove any Kubernetes objects
+    or Helm releases that were reconciled on the cluster by Flux.

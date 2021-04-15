@@ -17,9 +17,9 @@ limitations under the License.
 package main
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var suspendSourceGitCmd = &cobra.Command{
@@ -27,8 +27,7 @@ var suspendSourceGitCmd = &cobra.Command{
 	Short: "Suspend reconciliation of a GitRepository",
 	Long:  "The suspend command disables the reconciliation of a GitRepository resource.",
 	Example: `  # Suspend reconciliation for an existing GitRepository
-  flux suspend source git podinfo
-`,
+  flux suspend source git podinfo`,
 	RunE: suspendCommand{
 		apiType: gitRepositoryType,
 		object:  gitRepositoryAdapter{&sourcev1.GitRepository{}},

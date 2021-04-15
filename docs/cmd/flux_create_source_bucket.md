@@ -1,9 +1,11 @@
+---
+title: "flux create source bucket command"
+---
 ## flux create source bucket
 
 Create or update a Bucket source
 
 ### Synopsis
-
 
 The create source bucket command generates a Bucket resource and waits for it to be downloaded.
 For Buckets with static authentication, the credentials are stored in a Kubernetes secret.
@@ -15,7 +17,7 @@ flux create source bucket [name] [flags]
 ### Examples
 
 ```
-  # Create a source from a Buckets using static authentication
+  # Create a source for a Bucket using static authentication
   flux create source bucket podinfo \
 	--bucket-name=podinfo \
     --endpoint=minio.minio.svc.cluster.local:9000 \
@@ -24,14 +26,13 @@ flux create source bucket [name] [flags]
 	--secret-key=mysecretkey \
     --interval=10m
 
-  # Create a source from an Amazon S3 Bucket using IAM authentication
+  # Create a source for an Amazon S3 Bucket using IAM authentication
   flux create source bucket podinfo \
 	--bucket-name=podinfo \
 	--provider=aws \
     --endpoint=s3.amazonaws.com \
 	--region=us-east-1 \
     --interval=10m
-
 ```
 
 ### Options
@@ -54,7 +55,7 @@ flux create source bucket [name] [flags]
       --context string      kubernetes context to use
       --export              export in YAML format to stdout
       --interval duration   source sync interval (default 1m0s)
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
       --label strings       set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
@@ -63,5 +64,5 @@ flux create source bucket [name] [flags]
 
 ### SEE ALSO
 
-* [flux create source](flux_create_source.md)	 - Create or update sources
+* [flux create source](../flux_create_source/)	 - Create or update sources
 

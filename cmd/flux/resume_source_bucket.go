@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var resumeSourceBucketCmd = &cobra.Command{
@@ -26,8 +27,7 @@ var resumeSourceBucketCmd = &cobra.Command{
 	Short: "Resume a suspended Bucket",
 	Long:  `The resume command marks a previously suspended Bucket resource for reconciliation and waits for it to finish.`,
 	Example: `  # Resume reconciliation for an existing Bucket
-  flux resume source bucket podinfo
-`,
+  flux resume source bucket podinfo`,
 	RunE: resumeCommand{
 		apiType: bucketType,
 		object:  &bucketAdapter{&sourcev1.Bucket{}},

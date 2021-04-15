@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var deleteSourceGitCmd = &cobra.Command{
@@ -26,8 +27,7 @@ var deleteSourceGitCmd = &cobra.Command{
 	Short: "Delete a GitRepository source",
 	Long:  "The delete source git command deletes the given GitRepository from the cluster.",
 	Example: `  # Delete a Git repository
-  flux delete source git podinfo
-`,
+  flux delete source git podinfo`,
 	RunE: deleteCommand{
 		apiType: gitRepositoryType,
 		object:  universalAdapter{&sourcev1.GitRepository{}},

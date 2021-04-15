@@ -2,12 +2,14 @@ name: bootstrap
 
 on:
   push:
-    branches:
-      - '*'
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   github:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -15,58 +17,72 @@ jobs:
         uses: actions/cache@v1
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go1.16-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-go1.16-
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.15.x
+          go-version: 1.16.x
       - name: Setup Kubernetes
         uses: engineerd/setup-kind@v0.5.0
+      - name: Setup Kustomize
+        uses: fluxcd/pkg//actions/kustomize@main
+      - name: Build
+        run: |
+          make cmd/flux/manifests
+          go build -o /tmp/flux ./cmd/flux
       - name: Set outputs
         id: vars
-        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
-      - name: Build
-        run: sudo go build -o ./bin/flux ./cmd/flux
+        run: |
+          REPOSITORY_NAME=${{ github.event.repository.name }}
+          BRANCH_NAME=${GITHUB_REF##*/}
+          COMMIT_SHA=$(git rev-parse HEAD)
+          PSEUDO_RAND_SUFFIX=$(echo "${BRANCH_NAME}-${COMMIT_SHA}" | shasum | awk '{print $1}')
+          TEST_REPO_NAME="${REPOSITORY_NAME}-${PSEUDO_RAND_SUFFIX}"
+          echo "::set-output name=test_repo_name::$TEST_REPO_NAME"
       - name: bootstrap init
         run: |
-          ./bin/flux bootstrap github --manifests ./manifests/install/ \
+          /tmp/flux bootstrap github --manifests ./manifests/install/ \
           --owner=fluxcd-testing \
-          --repository=flux-test-${{ steps.vars.outputs.sha_short }} \
+          --repository=${{ steps.vars.outputs.test_repo_name }} \
           --branch=main \
-          --path=test-cluster
+          --path=test-cluster \
+          --team=team-z
         env:
           GITHUB_TOKEN: ${{ secrets.GITPROVIDER_BOT_TOKEN }}
       - name: bootstrap no-op
         run: |
-          ./bin/flux bootstrap github --manifests ./manifests/install/ \
+          /tmp/flux bootstrap github --manifests ./manifests/install/ \
           --owner=fluxcd-testing \
-          --repository=flux-test-${{ steps.vars.outputs.sha_short }} \
+          --repository=${{ steps.vars.outputs.test_repo_name }} \
           --branch=main \
-          --path=test-cluster
+          --path=test-cluster \
+          --team=team-z
         env:
           GITHUB_TOKEN: ${{ secrets.GITPROVIDER_BOT_TOKEN }}
       - name: uninstall
         run: |
-          ./bin/flux uninstall --resources --crds -s --timeout=10m
+          /tmp/flux uninstall -s --keep-namespace
+          kubectl delete ns flux-system --timeout=10m --wait=true
       - name: bootstrap reinstall
         run: |
-          ./bin/flux bootstrap github --manifests ./manifests/install/ \
+          /tmp/flux bootstrap github --manifests ./manifests/install/ \
           --owner=fluxcd-testing \
-          --repository=flux-test-${{ steps.vars.outputs.sha_short }} \
+          --repository=${{ steps.vars.outputs.test_repo_name }} \
           --branch=main \
-          --path=test-cluster
+          --path=test-cluster \
+          --team=team-z
         env:
           GITHUB_TOKEN: ${{ secrets.GITPROVIDER_BOT_TOKEN }}
       - name: delete repository
         run: |
-          ./bin/flux bootstrap github --manifests ./manifests/install/ \
-          --owner=fluxcd-testing \
-          --repository=flux-test-${{ steps.vars.outputs.sha_short }} \
-          --branch=main \
-          --path=test-cluster \
-          --delete
+          curl \
+            -X DELETE \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            --fail --silent \
+            https://api.github.com/repos/fluxcd-testing/${{ steps.vars.outputs.test_repo_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITPROVIDER_BOT_TOKEN }}
       - name: Debug failure

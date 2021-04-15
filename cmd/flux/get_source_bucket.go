@@ -17,11 +17,12 @@ limitations under the License.
 package main
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var getSourceBucketCmd = &cobra.Command{
@@ -32,8 +33,7 @@ var getSourceBucketCmd = &cobra.Command{
   flux get sources bucket
 
  # List buckets from all namespaces
-  flux get sources helm --all-namespaces
-`,
+  flux get sources helm --all-namespaces`,
 	RunE: getCommand{
 		apiType: bucketType,
 		list:    &bucketListAdapter{&sourcev1.BucketList{}},
@@ -44,14 +44,14 @@ func init() {
 	getSourceCmd.AddCommand(getSourceBucketCmd)
 }
 
-func (a *bucketListAdapter) summariseItem(i int, includeNamespace bool) []string {
+func (a *bucketListAdapter) summariseItem(i int, includeNamespace bool, includeKind bool) []string {
 	item := a.Items[i]
 	var revision string
 	if item.GetArtifact() != nil {
 		revision = item.GetArtifact().Revision
 	}
 	status, msg := statusAndMessage(item.Status.Conditions)
-	return append(nameColumns(&item, includeNamespace),
+	return append(nameColumns(&item, includeNamespace, includeKind),
 		status, msg, revision, strings.Title(strconv.FormatBool(item.Spec.Suspend)))
 }
 

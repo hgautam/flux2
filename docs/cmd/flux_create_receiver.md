@@ -1,3 +1,6 @@
+---
+title: "flux create receiver command"
+---
 ## flux create receiver
 
 Create or update a Receiver resource
@@ -21,7 +24,6 @@ flux create receiver [name] [flags]
 	--secret-ref webhook-token \
 	--resource GitRepository/webapp \
 	--resource HelmRepository/webapp
-
 ```
 
 ### Options
@@ -40,7 +42,7 @@ flux create receiver [name] [flags]
       --context string      kubernetes context to use
       --export              export in YAML format to stdout
       --interval duration   source sync interval (default 1m0s)
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
       --label strings       set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
@@ -49,5 +51,5 @@ flux create receiver [name] [flags]
 
 ### SEE ALSO
 
-* [flux create](flux_create.md)	 - Create or update sources and resources
+* [flux create](../flux_create/)	 - Create or update sources and resources
 

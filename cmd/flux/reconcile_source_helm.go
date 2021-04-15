@@ -18,8 +18,10 @@ package main
 
 import (
 	"fmt"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var reconcileSourceHelmCmd = &cobra.Command{
@@ -27,8 +29,7 @@ var reconcileSourceHelmCmd = &cobra.Command{
 	Short: "Reconcile a HelmRepository source",
 	Long:  `The reconcile source command triggers a reconciliation of a HelmRepository resource and waits for it to finish.`,
 	Example: `  # Trigger a reconciliation for an existing source
-  flux reconcile source helm podinfo
-`,
+  flux reconcile source helm podinfo`,
 	RunE: reconcileCommand{
 		apiType: helmRepositoryType,
 		object:  helmRepositoryAdapter{&sourcev1.HelmRepository{}},

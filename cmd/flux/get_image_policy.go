@@ -30,8 +30,7 @@ var getImagePolicyCmd = &cobra.Command{
   flux get image policy
 
  # List image policies from all namespaces
-  flux get image policy --all-namespaces
-`,
+  flux get image policy --all-namespaces`,
 	RunE: getCommand{
 		apiType: imagePolicyType,
 		list:    &imagePolicyListAdapter{&imagev1.ImagePolicyList{}},
@@ -42,10 +41,10 @@ func init() {
 	getImageCmd.AddCommand(getImagePolicyCmd)
 }
 
-func (s imagePolicyListAdapter) summariseItem(i int, includeNamespace bool) []string {
+func (s imagePolicyListAdapter) summariseItem(i int, includeNamespace bool, includeKind bool) []string {
 	item := s.Items[i]
 	status, msg := statusAndMessage(item.Status.Conditions)
-	return append(nameColumns(&item, includeNamespace), status, msg, item.Status.LatestImage)
+	return append(nameColumns(&item, includeNamespace, includeKind), status, msg, item.Status.LatestImage)
 }
 
 func (s imagePolicyListAdapter) headers(includeNamespace bool) []string {

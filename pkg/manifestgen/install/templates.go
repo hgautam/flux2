@@ -137,6 +137,13 @@ spec:
       imagePullSecrets:
        - name: {{.ImagePullSecret}}
 {{- end }}
+{{ if gt (len .TolerationKeys) 0 }}
+      tolerations:
+{{- range $i, $key := .TolerationKeys }}
+       - key: "{{$key}}"
+         operator: "Exists"
+{{- end }}
+{{- end }}
 `
 
 var labelsTmpl = `---
@@ -147,6 +154,7 @@ metadata:
 labels:
   app.kubernetes.io/instance: {{.Namespace}}
   app.kubernetes.io/version: "{{.Version}}"
+  app.kubernetes.io/part-of: flux
 fieldSpecs:
   - path: metadata/labels
     create: true

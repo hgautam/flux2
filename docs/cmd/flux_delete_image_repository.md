@@ -1,3 +1,6 @@
+---
+title: "flux delete image repository command"
+---
 ## flux delete image repository
 
 Delete an ImageRepository object
@@ -15,7 +18,6 @@ flux delete image repository [name] [flags]
 ```
   # Delete an image repository
   flux delete image repository alpine
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux delete image repository [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
   -s, --silent              delete resource without asking for confirmation
       --timeout duration    timeout for this operation (default 5m0s)
@@ -37,5 +39,5 @@ flux delete image repository [name] [flags]
 
 ### SEE ALSO
 
-* [flux delete image](flux_delete_image.md)	 - Delete image automation objects
+* [flux delete image](../flux_delete_image/)	 - Delete image automation objects
 

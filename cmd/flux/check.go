@@ -21,14 +21,20 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
-	"github.com/blang/semver/v4"
-	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
+	v1 "k8s.io/api/apps/v1"
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/fluxcd/pkg/version"
+
+	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/fluxcd/flux2/pkg/manifestgen/install"
+	"github.com/fluxcd/flux2/pkg/status"
 )
 
 var checkCmd = &cobra.Command{
@@ -40,8 +46,7 @@ the local environment is configured correctly and if the installed components ar
   flux check --pre
 
   # Run installation checks
-  flux check
-`,
+  flux check`,
 	RunE: runCheckCmd,
 }
 
@@ -74,11 +79,13 @@ func runCheckCmd(cmd *cobra.Command, args []string) error {
 	logger.Actionf("checking prerequisites")
 	checkFailed := false
 
-	if !kubectlCheck(ctx, ">=1.18.0") {
+	fluxCheck()
+
+	if !kubectlCheck(ctx, ">=1.18.0-0") {
 		checkFailed = true
 	}
 
-	if !kubernetesCheck(">=1.16.0") {
+	if !kubernetesCheck(">=1.16.0-0") {
 		checkFailed = true
 	}
 
@@ -101,7 +108,29 @@ func runCheckCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func kubectlCheck(ctx context.Context, version string) bool {
+func fluxCheck() {
+	curSv, err := version.ParseVersion(VERSION)
+	if err != nil {
+		return
+	}
+	// Exclude development builds.
+	if curSv.Prerelease() != "" {
+		return
+	}
+	latest, err := install.GetLatestVersion()
+	if err != nil {
+		return
+	}
+	latestSv, err := version.ParseVersion(latest)
+	if err != nil {
+		return
+	}
+	if latestSv.GreaterThan(curSv) {
+		logger.Failuref("flux %s <%s (new version is available, please upgrade)", curSv, latestSv)
+	}
+}
+
+func kubectlCheck(ctx context.Context, constraint string) bool {
 	_, err := exec.LookPath("kubectl")
 	if err != nil {
 		logger.Failuref("kubectl not found")
@@ -117,58 +146,58 @@ func kubectlCheck(ctx context.Context, version string) bool {
 
 	kv := &kubectlVersion{}
 	if err = json.Unmarshal([]byte(output), kv); err != nil {
-		logger.Failuref("kubectl version output can't be unmarshaled")
+		logger.Failuref("kubectl version output can't be unmarshalled")
 		return false
 	}
 
-	v, err := semver.ParseTolerant(kv.ClientVersion.GitVersion)
+	v, err := version.ParseVersion(kv.ClientVersion.GitVersion)
 	if err != nil {
 		logger.Failuref("kubectl version can't be parsed")
 		return false
 	}
 
-	rng, _ := semver.ParseRange(version)
-	if !rng(v) {
-		logger.Failuref("kubectl version must be %s", version)
+	c, _ := semver.NewConstraint(constraint)
+	if !c.Check(v) {
+		logger.Failuref("kubectl version %s < %s", v.Original(), constraint)
 		return false
 	}
 
-	logger.Successf("kubectl %s %s", v.String(), version)
+	logger.Successf("kubectl %s %s", v.String(), constraint)
 	return true
 }
 
-func kubernetesCheck(version string) bool {
+func kubernetesCheck(constraint string) bool {
 	cfg, err := utils.KubeConfig(rootArgs.kubeconfig, rootArgs.kubecontext)
 	if err != nil {
 		logger.Failuref("Kubernetes client initialization failed: %s", err.Error())
 		return false
 	}
 
-	client, err := kubernetes.NewForConfig(cfg)
+	clientSet, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		logger.Failuref("Kubernetes client initialization failed: %s", err.Error())
 		return false
 	}
 
-	ver, err := client.Discovery().ServerVersion()
+	kv, err := clientSet.Discovery().ServerVersion()
 	if err != nil {
 		logger.Failuref("Kubernetes API call failed: %s", err.Error())
 		return false
 	}
 
-	v, err := semver.ParseTolerant(ver.String())
+	v, err := version.ParseVersion(kv.String())
 	if err != nil {
 		logger.Failuref("Kubernetes version can't be determined")
 		return false
 	}
 
-	rng, _ := semver.ParseRange(version)
-	if !rng(v) {
-		logger.Failuref("Kubernetes version must be %s", version)
+	c, _ := semver.NewConstraint(constraint)
+	if !c.Check(v) {
+		logger.Failuref("Kubernetes version %s < %s", v.Original(), constraint)
 		return false
 	}
 
-	logger.Successf("Kubernetes %s %s", v.String(), version)
+	logger.Successf("Kubernetes %s %s", v.String(), constraint)
 	return true
 }
 
@@ -176,23 +205,34 @@ func componentsCheck() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
 	defer cancel()
 
-	statusChecker, err := NewStatusChecker(time.Second, 30*time.Second)
+	kubeConfig, err := utils.KubeConfig(rootArgs.kubeconfig, rootArgs.kubecontext)
+	if err != nil {
+		return false
+	}
+
+	statusChecker, err := status.NewStatusChecker(kubeConfig, time.Second, rootArgs.timeout, logger)
+	if err != nil {
+		return false
+	}
+
+	kubeClient, err := utils.KubeClient(rootArgs.kubeconfig, rootArgs.kubecontext)
 	if err != nil {
 		return false
 	}
 
 	ok := true
-	deployments := append(checkArgs.components, checkArgs.extraComponents...)
-	for _, deployment := range deployments {
-		if err := statusChecker.Assess(deployment); err != nil {
-			ok = false
-		} else {
-			logger.Successf("%s: healthy", deployment)
-		}
-
-		kubectlArgs := []string{"-n", rootArgs.namespace, "get", "deployment", deployment, "-o", "jsonpath=\"{..image}\""}
-		if output, err := utils.ExecKubectlCommand(ctx, utils.ModeCapture, rootArgs.kubeconfig, rootArgs.kubecontext, kubectlArgs...); err == nil {
-			logger.Actionf(strings.TrimPrefix(strings.TrimSuffix(output, "\""), "\""))
+	selector := client.MatchingLabels{"app.kubernetes.io/instance": rootArgs.namespace}
+	var list v1.DeploymentList
+	if err := kubeClient.List(ctx, &list, client.InNamespace(rootArgs.namespace), selector); err == nil {
+		for _, d := range list.Items {
+			if ref, err := buildComponentObjectRefs(d.Name); err == nil {
+				if err := statusChecker.Assess(ref...); err != nil {
+					ok = false
+				}
+			}
+			for _, c := range d.Spec.Template.Spec.Containers {
+				logger.Actionf(c.Image)
+			}
 		}
 	}
 	return ok

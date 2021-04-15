@@ -20,8 +20,9 @@ import (
 	"strconv"
 	"strings"
 
-	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 )
 
 var getKsCmd = &cobra.Command{
@@ -30,8 +31,7 @@ var getKsCmd = &cobra.Command{
 	Short:   "Get Kustomization statuses",
 	Long:    "The get kustomizations command prints the statuses of the resources.",
 	Example: `  # List all kustomizations and their status
-  flux get kustomizations
-`,
+  flux get kustomizations`,
 	RunE: getCommand{
 		apiType: kustomizationType,
 		list:    &kustomizationListAdapter{&kustomizev1.KustomizationList{}},
@@ -42,11 +42,11 @@ func init() {
 	getCmd.AddCommand(getKsCmd)
 }
 
-func (a kustomizationListAdapter) summariseItem(i int, includeNamespace bool) []string {
+func (a kustomizationListAdapter) summariseItem(i int, includeNamespace bool, includeKind bool) []string {
 	item := a.Items[i]
 	revision := item.Status.LastAppliedRevision
 	status, msg := statusAndMessage(item.Status.Conditions)
-	return append(nameColumns(&item, includeNamespace),
+	return append(nameColumns(&item, includeNamespace, includeKind),
 		status, msg, revision, strings.Title(strconv.FormatBool(item.Spec.Suspend)))
 }
 

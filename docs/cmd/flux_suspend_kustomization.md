@@ -1,3 +1,6 @@
+---
+title: "flux suspend kustomization command"
+---
 ## flux suspend kustomization
 
 Suspend reconciliation of Kustomization
@@ -15,7 +18,6 @@ flux suspend kustomization [name] [flags]
 ```
   # Suspend reconciliation for an existing Kustomization
   flux suspend ks podinfo
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux suspend kustomization [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -36,5 +38,5 @@ flux suspend kustomization [name] [flags]
 
 ### SEE ALSO
 
-* [flux suspend](flux_suspend.md)	 - Suspend resources
+* [flux suspend](../flux_suspend/)	 - Suspend resources
 

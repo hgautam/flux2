@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 	"github.com/spf13/cobra"
+
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 )
 
 var deleteHelmReleaseCmd = &cobra.Command{
@@ -27,8 +28,7 @@ var deleteHelmReleaseCmd = &cobra.Command{
 	Short:   "Delete a HelmRelease resource",
 	Long:    "The delete helmrelease command removes the given HelmRelease from the cluster.",
 	Example: `  # Delete a Helm release and the Kubernetes resources created by it
-  flux delete hr podinfo
-`,
+  flux delete hr podinfo`,
 	RunE: deleteCommand{
 		apiType: helmReleaseType,
 		object:  universalAdapter{&helmv2.HelmRelease{}},

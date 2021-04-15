@@ -32,36 +32,36 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 
 	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/fluxcd/flux2/pkg/manifestgen/sourcesecret"
 )
 
 var createSourceHelmCmd = &cobra.Command{
 	Use:   "helm [name]",
 	Short: "Create or update a HelmRepository source",
-	Long: `
-The create source helm command generates a HelmRepository resource and waits for it to fetch the index.
+	Long: `The create source helm command generates a HelmRepository resource and waits for it to fetch the index.
 For private Helm repositories, the basic authentication credentials are stored in a Kubernetes secret.`,
-	Example: `  # Create a source from a public Helm repository
+	Example: `  # Create a source for a public Helm repository
   flux create source helm podinfo \
     --url=https://stefanprodan.github.io/podinfo \
     --interval=10m
 
-  # Create a source from a Helm repository using basic authentication
+  # Create a source for a Helm repository using basic authentication
   flux create source helm podinfo \
     --url=https://stefanprodan.github.io/podinfo \
     --username=username \
     --password=password
 
-  # Create a source from a Helm repository using TLS authentication
+  # Create a source for a Helm repository using TLS authentication
   flux create source helm podinfo \
     --url=https://stefanprodan.github.io/podinfo \
     --cert-file=./cert.crt \
     --key-file=./key.crt \
-    --ca-file=./ca.crt
-`,
+    --ca-file=./ca.crt`,
 	RunE: createSourceHelmCmdRun,
 }
 
@@ -135,7 +135,7 @@ func createSourceHelmCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if createArgs.export {
-		return exportHelmRepository(*helmRepository)
+		return printExport(exportHelmRepository(helmRepository))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)
@@ -149,46 +149,27 @@ func createSourceHelmCmdRun(cmd *cobra.Command, args []string) error {
 	logger.Generatef("generating HelmRepository source")
 	if sourceHelmArgs.secretRef == "" {
 		secretName := fmt.Sprintf("helm-%s", name)
-
-		secret := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: rootArgs.namespace,
-				Labels:    sourceLabels,
-			},
-			StringData: map[string]string{},
+		secretOpts := sourcesecret.Options{
+			Name:         secretName,
+			Namespace:    rootArgs.namespace,
+			Username:     sourceHelmArgs.username,
+			Password:     sourceHelmArgs.password,
+			CertFilePath: sourceHelmArgs.certFile,
+			KeyFilePath:  sourceHelmArgs.keyFile,
+			CAFilePath:   sourceHelmArgs.caFile,
+			ManifestFile: sourcesecret.MakeDefaultOptions().ManifestFile,
 		}
-
-		if sourceHelmArgs.username != "" && sourceHelmArgs.password != "" {
-			secret.StringData["username"] = sourceHelmArgs.username
-			secret.StringData["password"] = sourceHelmArgs.password
+		secret, err := sourcesecret.Generate(secretOpts)
+		if err != nil {
+			return err
 		}
-
-		if sourceHelmArgs.certFile != "" && sourceHelmArgs.keyFile != "" {
-			cert, err := ioutil.ReadFile(sourceHelmArgs.certFile)
-			if err != nil {
-				return fmt.Errorf("failed to read repository cert file '%s': %w", sourceHelmArgs.certFile, err)
-			}
-			secret.StringData["certFile"] = string(cert)
-
-			key, err := ioutil.ReadFile(sourceHelmArgs.keyFile)
-			if err != nil {
-				return fmt.Errorf("failed to read repository key file '%s': %w", sourceHelmArgs.keyFile, err)
-			}
-			secret.StringData["keyFile"] = string(key)
+		var s corev1.Secret
+		if err = yaml.Unmarshal([]byte(secret.Content), &s); err != nil {
+			return err
 		}
-
-		if sourceHelmArgs.caFile != "" {
-			ca, err := ioutil.ReadFile(sourceHelmArgs.caFile)
-			if err != nil {
-				return fmt.Errorf("failed to read repository CA file '%s': %w", sourceHelmArgs.caFile, err)
-			}
-			secret.StringData["caFile"] = string(ca)
-		}
-
-		if len(secret.StringData) > 0 {
+		if len(s.StringData) > 0 {
 			logger.Actionf("applying secret with repository credentials")
-			if err := upsertSecret(ctx, kubeClient, secret); err != nil {
+			if err := upsertSecret(ctx, kubeClient, s); err != nil {
 				return err
 			}
 			helmRepository.Spec.SecretRef = &meta.LocalObjectReference{

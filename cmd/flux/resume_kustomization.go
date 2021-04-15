@@ -19,8 +19,9 @@ package main
 import (
 	"fmt"
 
-	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 )
 
 var resumeKsCmd = &cobra.Command{
@@ -30,8 +31,7 @@ var resumeKsCmd = &cobra.Command{
 	Long: `The resume command marks a previously suspended Kustomization resource for reconciliation and waits for it to
 finish the apply.`,
 	Example: `  # Resume reconciliation for an existing Kustomization
-  flux resume ks podinfo
-`,
+  flux resume ks podinfo`,
 	RunE: resumeCommand{
 		apiType: kustomizationType,
 		object:  kustomizationAdapter{&kustomizev1.Kustomization{}},

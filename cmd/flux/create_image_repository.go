@@ -30,7 +30,7 @@ import (
 )
 
 var createImageRepositoryCmd = &cobra.Command{
-	Use:   "repository <name>",
+	Use:   "repository [name]",
 	Short: "Create or update an ImageRepository object",
 	Long: `The create image repository command generates an ImageRepository resource.
 An ImageRepository object specifies an image repository to scan.`,
@@ -57,8 +57,7 @@ An ImageRepository object specifies an image repository to scan.`,
     --cert-file client.crt --key-file client.key
   flux create image repository app-repo \
     --cert-secret-ref client-cert \
-    --image registry.example.com/private/app --interval 5m
-`,
+    --image registry.example.com/private/app --interval 5m`,
 	RunE: createImageRepositoryRun,
 }
 

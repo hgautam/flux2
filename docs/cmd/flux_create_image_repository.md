@@ -1,3 +1,6 @@
+---
+title: "flux create image repository command"
+---
 ## flux create image repository
 
 Create or update an ImageRepository object
@@ -8,7 +11,7 @@ The create image repository command generates an ImageRepository resource.
 An ImageRepository object specifies an image repository to scan.
 
 ```
-flux create image repository <name> [flags]
+flux create image repository [name] [flags]
 ```
 
 ### Examples
@@ -38,7 +41,6 @@ flux create image repository <name> [flags]
   flux create image repository app-repo \
     --cert-secret-ref client-cert \
     --image registry.example.com/private/app --interval 5m
-
 ```
 
 ### Options
@@ -57,7 +59,7 @@ flux create image repository <name> [flags]
       --context string      kubernetes context to use
       --export              export in YAML format to stdout
       --interval duration   source sync interval (default 1m0s)
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
       --label strings       set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
@@ -66,5 +68,5 @@ flux create image repository <name> [flags]
 
 ### SEE ALSO
 
-* [flux create image](flux_create_image.md)	 - Create or update resources dealing with image automation
+* [flux create image](../flux_create_image/)	 - Create or update resources dealing with image automation
 

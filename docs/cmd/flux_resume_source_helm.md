@@ -1,3 +1,6 @@
+---
+title: "flux resume source helm command"
+---
 ## flux resume source helm
 
 Resume a suspended HelmRepository
@@ -15,7 +18,6 @@ flux resume source helm [name] [flags]
 ```
   # Resume reconciliation for an existing HelmRepository
   flux resume source helm bitnami
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux resume source helm [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -36,5 +38,5 @@ flux resume source helm [name] [flags]
 
 ### SEE ALSO
 
-* [flux resume source](flux_resume_source.md)	 - Resume sources
+* [flux resume source](../flux_resume_source/)	 - Resume sources
 

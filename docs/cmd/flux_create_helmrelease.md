@@ -1,3 +1,6 @@
+---
+title: "flux create helmrelease command"
+---
 ## flux create helmrelease
 
 Create or update a HelmRelease resource
@@ -59,13 +62,18 @@ flux create helmrelease [name] [flags]
     --source=HelmRepository/podinfo \
     --chart=podinfo
 
+  # Create a HelmRelease using a source from a different namespace
+  flux create hr podinfo \
+    --namespace=default \
+    --source=HelmRepository/podinfo.flux-system \
+    --chart=podinfo
+
   # Create a HelmRelease definition on disk without applying it on the cluster
   flux create hr podinfo \
     --source=HelmRepository/podinfo \
     --chart=podinfo \
     --values=./values.yaml \
     --export > podinfo-release.yaml
-
 ```
 
 ### Options
@@ -77,7 +85,7 @@ flux create helmrelease [name] [flags]
   -h, --help                                help for helmrelease
       --release-name string                 name used for the Helm release, defaults to a composition of '[<target-namespace>-]<HelmRelease-name>'
       --service-account string              the name of the service account to impersonate when reconciling this HelmRelease
-      --source helmChartSource              source that contains the chart in the format '<kind>/<name>', where kind must be one of: (HelmRepository, GitRepository, Bucket)
+      --source helmChartSource              source that contains the chart in the format '<kind>/<name>.<namespace>', where kind must be one of: (HelmRepository, GitRepository, Bucket)
       --target-namespace string             namespace to install this release, defaults to the HelmRelease namespace
       --values stringArray                  local path to values.yaml files
       --values-from helmReleaseValuesFrom   Kubernetes object reference that contains the values.yaml data key in the format '<kind>/<name>', where kind must be one of: (Secret, ConfigMap)
@@ -89,7 +97,7 @@ flux create helmrelease [name] [flags]
       --context string      kubernetes context to use
       --export              export in YAML format to stdout
       --interval duration   source sync interval (default 1m0s)
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
       --label strings       set labels on the resource (can specify multiple labels with commas: label1=value1,label2=value2)
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
@@ -98,5 +106,5 @@ flux create helmrelease [name] [flags]
 
 ### SEE ALSO
 
-* [flux create](flux_create.md)	 - Create or update sources and resources
+* [flux create](../flux_create/)	 - Create or update sources and resources
 

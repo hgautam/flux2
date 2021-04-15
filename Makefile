@@ -1,4 +1,7 @@
 VERSION?=$(shell grep 'VERSION' cmd/flux/main.go | awk '{ print $$4 }' | tr -d '"')
+EMBEDDED_MANIFESTS_TARGET=cmd/flux/manifests
+
+rwildcard=$(foreach d,$(wildcard $(addsuffix *,$(1))),$(call rwildcard,$(d)/,$(2)) $(filter $(subst *,%,$(2)),$(d)))
 
 all: test build
 
@@ -11,10 +14,13 @@ fmt:
 vet:
 	go vet ./...
 
-test: tidy fmt vet docs
+test: $(EMBEDDED_MANIFESTS_TARGET) tidy fmt vet docs
 	go test ./... -coverprofile cover.out
 
-build:
+$(EMBEDDED_MANIFESTS_TARGET): $(call rwildcard,manifests/,*.yaml *.json)
+	./manifests/scripts/bundle.sh
+
+build: $(EMBEDDED_MANIFESTS_TARGET)
 	CGO_ENABLED=0 go build -o ./bin/flux ./cmd/flux
 
 install:
@@ -22,7 +28,7 @@ install:
 
 .PHONY: docs
 docs:
-	rm docs/cmd/*
+	rm -rf docs/cmd/*
 	mkdir -p ./docs/cmd && go run ./cmd/flux/ docgen
 
 install-dev:

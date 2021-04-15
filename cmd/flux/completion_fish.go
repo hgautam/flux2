@@ -25,16 +25,11 @@ import (
 var completionFishCmd = &cobra.Command{
 	Use:   "fish",
 	Short: "Generates fish completion scripts",
-	Example: `To load completion run
+	Example: `To configure your fish shell to load completions for each session write this script to your completions dir:
 
-. <(flux completion fish)
+flux completion fish > ~/.config/fish/completions/flux.fish
 
-To configure your fish shell to load completions for each session write this script to your completions dir:
-
-flux completion fish > ~/.config/fish/completions/flux
-
-See http://fishshell.com/docs/current/index.html#completion-own for more details
-`,
+See http://fishshell.com/docs/current/index.html#completion-own for more details`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rootCmd.GenFishCompletion(os.Stdout, true)
 	},

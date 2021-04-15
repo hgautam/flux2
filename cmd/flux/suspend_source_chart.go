@@ -17,9 +17,9 @@ limitations under the License.
 package main
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var suspendSourceHelmChartCmd = &cobra.Command{
@@ -27,8 +27,7 @@ var suspendSourceHelmChartCmd = &cobra.Command{
 	Short: "Suspend reconciliation of a HelmChart",
 	Long:  "The suspend command disables the reconciliation of a HelmChart resource.",
 	Example: `  # Suspend reconciliation for an existing HelmChart
-  flux suspend source chart podinfo
-`,
+  flux suspend source chart podinfo`,
 	RunE: suspendCommand{
 		apiType: helmChartType,
 		object:  helmChartAdapter{&sourcev1.HelmChart{}},

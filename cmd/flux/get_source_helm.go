@@ -20,8 +20,9 @@ import (
 	"strconv"
 	"strings"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var getSourceHelmCmd = &cobra.Command{
@@ -32,8 +33,7 @@ var getSourceHelmCmd = &cobra.Command{
   flux get sources helm
 
  # List Helm repositories from all namespaces
-  flux get sources helm --all-namespaces
-`,
+  flux get sources helm --all-namespaces`,
 	RunE: getCommand{
 		apiType: helmRepositoryType,
 		list:    &helmRepositoryListAdapter{&sourcev1.HelmRepositoryList{}},
@@ -44,14 +44,14 @@ func init() {
 	getSourceCmd.AddCommand(getSourceHelmCmd)
 }
 
-func (a *helmRepositoryListAdapter) summariseItem(i int, includeNamespace bool) []string {
+func (a *helmRepositoryListAdapter) summariseItem(i int, includeNamespace bool, includeKind bool) []string {
 	item := a.Items[i]
 	var revision string
 	if item.GetArtifact() != nil {
 		revision = item.GetArtifact().Revision
 	}
 	status, msg := statusAndMessage(item.Status.Conditions)
-	return append(nameColumns(&item, includeNamespace),
+	return append(nameColumns(&item, includeNamespace, includeKind),
 		status, msg, revision, strings.Title(strconv.FormatBool(item.Spec.Suspend)))
 }
 

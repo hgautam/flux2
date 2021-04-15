@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1beta1"
 )
 
 var suspendKsCmd = &cobra.Command{
@@ -27,8 +28,7 @@ var suspendKsCmd = &cobra.Command{
 	Short:   "Suspend reconciliation of Kustomization",
 	Long:    "The suspend command disables the reconciliation of a Kustomization resource.",
 	Example: `  # Suspend reconciliation for an existing Kustomization
-  flux suspend ks podinfo
-`,
+  flux suspend ks podinfo`,
 	RunE: suspendCommand{
 		apiType: kustomizationType,
 		object:  kustomizationAdapter{&kustomizev1.Kustomization{}},

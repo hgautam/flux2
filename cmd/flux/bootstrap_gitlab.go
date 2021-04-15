@@ -20,21 +20,22 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
-	"path"
-	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/cobra"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fluxcd/pkg/git"
-
+	"github.com/fluxcd/flux2/internal/bootstrap"
+	"github.com/fluxcd/flux2/internal/bootstrap/git/gogit"
+	"github.com/fluxcd/flux2/internal/bootstrap/provider"
 	"github.com/fluxcd/flux2/internal/flags"
 	"github.com/fluxcd/flux2/internal/utils"
+	"github.com/fluxcd/flux2/pkg/manifestgen/install"
+	"github.com/fluxcd/flux2/pkg/manifestgen/sourcesecret"
+	"github.com/fluxcd/flux2/pkg/manifestgen/sync"
 )
 
 var bootstrapGitLabCmd = &cobra.Command{
@@ -48,40 +49,44 @@ the bootstrap command will perform an upgrade if needed.`,
 	Example: `  # Create a GitLab API token and export it as an env var
   export GITLAB_TOKEN=<my-token>
 
-  # Run bootstrap for a private repo using HTTPS token authentication
-  flux bootstrap gitlab --owner=<group> --repository=<repo name> --token-auth
+  # Run bootstrap for a private repository using HTTPS token authentication
+  flux bootstrap gitlab --owner=<group> --repository=<repository name> --token-auth
 
-  # Run bootstrap for a private repo using SSH authentication
-  flux bootstrap gitlab --owner=<group> --repository=<repo name>
+  # Run bootstrap for a private repository using SSH authentication
+  flux bootstrap gitlab --owner=<group> --repository=<repository name>
 
   # Run bootstrap for a repository path
-  flux bootstrap gitlab --owner=<group> --repository=<repo name> --path=dev-cluster
+  flux bootstrap gitlab --owner=<group> --repository=<repository name> --path=dev-cluster
 
   # Run bootstrap for a public repository on a personal account
-  flux bootstrap gitlab --owner=<user> --repository=<repo name> --private=false --personal --token-auth
+  flux bootstrap gitlab --owner=<user> --repository=<repository name> --private=false --personal --token-auth
 
-  # Run bootstrap for a private repo hosted on a GitLab server
-  flux bootstrap gitlab --owner=<group> --repository=<repo name> --hostname=<domain> --token-auth
+  # Run bootstrap for a private repository hosted on a GitLab server
+  flux bootstrap gitlab --owner=<group> --repository=<repository name> --hostname=<domain> --token-auth
 
   # Run bootstrap for a an existing repository with a branch named main
-  flux bootstrap gitlab --owner=<organization> --repository=<repo name> --branch=main --token-auth
-`,
+  flux bootstrap gitlab --owner=<organization> --repository=<repository name> --branch=main --token-auth`,
 	RunE: bootstrapGitLabCmdRun,
 }
 
 const (
-	gitlabProjectRegex = `\A[[:alnum:]\x{00A9}-\x{1f9ff}_][[:alnum:]\p{Pd}\x{00A9}-\x{1f9ff}_\.]*\z`
+	glDefaultPermission = "maintain"
+	glDefaultDomain     = "gitlab.com"
+	glTokenEnvVar       = "GITLAB_TOKEN"
+	gitlabProjectRegex  = `\A[[:alnum:]\x{00A9}-\x{1f9ff}_][[:alnum:]\p{Pd}\x{00A9}-\x{1f9ff}_\.]*\z`
 )
 
 type gitlabFlags struct {
-	owner       string
-	repository  string
-	interval    time.Duration
-	personal    bool
-	private     bool
-	hostname    string
-	sshHostname string
-	path        flags.SafeRelativePath
+	owner        string
+	repository   string
+	interval     time.Duration
+	personal     bool
+	private      bool
+	hostname     string
+	path         flags.SafeRelativePath
+	teams        []string
+	readWriteKey bool
+	reconcile    bool
 }
 
 var gitlabArgs gitlabFlags
@@ -89,28 +94,29 @@ var gitlabArgs gitlabFlags
 func init() {
 	bootstrapGitLabCmd.Flags().StringVar(&gitlabArgs.owner, "owner", "", "GitLab user or group name")
 	bootstrapGitLabCmd.Flags().StringVar(&gitlabArgs.repository, "repository", "", "GitLab repository name")
-	bootstrapGitLabCmd.Flags().BoolVar(&gitlabArgs.personal, "personal", false, "is personal repository")
-	bootstrapGitLabCmd.Flags().BoolVar(&gitlabArgs.private, "private", true, "is private repository")
+	bootstrapGitLabCmd.Flags().StringArrayVar(&gitlabArgs.teams, "team", []string{}, "GitLab teams to be given maintainer access")
+	bootstrapGitLabCmd.Flags().BoolVar(&gitlabArgs.personal, "personal", false, "if true, the owner is assumed to be a GitLab user; otherwise a group")
+	bootstrapGitLabCmd.Flags().BoolVar(&gitlabArgs.private, "private", true, "if true, the repository is setup or configured as private")
 	bootstrapGitLabCmd.Flags().DurationVar(&gitlabArgs.interval, "interval", time.Minute, "sync interval")
-	bootstrapGitLabCmd.Flags().StringVar(&gitlabArgs.hostname, "hostname", git.GitLabDefaultHostname, "GitLab hostname")
-	bootstrapGitLabCmd.Flags().StringVar(&gitlabArgs.sshHostname, "ssh-hostname", "", "GitLab SSH hostname, to be used when the SSH host differs from the HTTPS one")
+	bootstrapGitLabCmd.Flags().StringVar(&gitlabArgs.hostname, "hostname", glDefaultDomain, "GitLab hostname")
 	bootstrapGitLabCmd.Flags().Var(&gitlabArgs.path, "path", "path relative to the repository root, when specified the cluster sync will be scoped to this path")
+	bootstrapGitLabCmd.Flags().BoolVar(&gitlabArgs.readWriteKey, "read-write-key", false, "if true, the deploy key is configured with read/write permissions")
+	bootstrapGitLabCmd.Flags().BoolVar(&gitlabArgs.reconcile, "reconcile", false, "if true, the configured options are also reconciled if the repository already exists")
 
 	bootstrapCmd.AddCommand(bootstrapGitLabCmd)
 }
 
 func bootstrapGitLabCmdRun(cmd *cobra.Command, args []string) error {
-	glToken := os.Getenv(git.GitLabTokenName)
+	glToken := os.Getenv(glTokenEnvVar)
 	if glToken == "" {
-		return fmt.Errorf("%s environment variable not found", git.GitLabTokenName)
+		return fmt.Errorf("%s environment variable not found", glTokenEnvVar)
 	}
 
-	projectNameIsValid, err := regexp.MatchString(gitlabProjectRegex, gitlabArgs.repository)
-	if err != nil {
+	if projectNameIsValid, err := regexp.MatchString(gitlabProjectRegex, gitlabArgs.repository); err != nil || !projectNameIsValid {
+		if err == nil {
+			err = fmt.Errorf("%s is an invalid project name for gitlab.\nIt can contain only letters, digits, emojis, '_', '.', dash, space. It must start with letter, digit, emoji or '_'.", gitlabArgs.repository)
+		}
 		return err
-	}
-	if !projectNameIsValid {
-		return fmt.Errorf("%s is an invalid project name for gitlab.\nIt can contain only letters, digits, emojis, '_', '.', dash, space. It must start with letter, digit, emoji or '_'.", gitlabArgs.repository)
 	}
 
 	if err := bootstrapValidate(); err != nil {
@@ -125,151 +131,138 @@ func bootstrapGitLabCmdRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	usedPath, bootstrapPathDiffers := checkIfBootstrapPathDiffers(ctx, kubeClient, rootArgs.namespace, filepath.ToSlash(gitlabArgs.path.String()))
-
-	if bootstrapPathDiffers {
-		return fmt.Errorf("cluster already bootstrapped to %v path", usedPath)
+	// Manifest base
+	if ver, err := getVersion(bootstrapArgs.version); err == nil {
+		bootstrapArgs.version = ver
 	}
+	manifestsBase, err := buildEmbeddedManifestBase()
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(manifestsBase)
 
-	repository, err := git.NewRepository(gitlabArgs.repository, gitlabArgs.owner, gitlabArgs.hostname, glToken, "flux", gitlabArgs.owner+"@users.noreply.gitlab.com")
+	// Build GitLab provider
+	providerCfg := provider.Config{
+		Provider: provider.GitProviderGitLab,
+		Hostname: gitlabArgs.hostname,
+		Token:    glToken,
+	}
+	// Workaround for: https://github.com/fluxcd/go-git-providers/issues/55
+	if hostname := providerCfg.Hostname; hostname != glDefaultDomain &&
+		!strings.HasPrefix(hostname, "https://") &&
+		!strings.HasPrefix(hostname, "http://") {
+		providerCfg.Hostname = "https://" + providerCfg.Hostname
+	}
+	providerClient, err := provider.BuildGitProvider(providerCfg)
 	if err != nil {
 		return err
 	}
 
-	if gitlabArgs.sshHostname != "" {
-		repository.SSHHost = gitlabArgs.sshHostname
-	}
-
-	tmpDir, err := ioutil.TempDir("", rootArgs.namespace)
+	// Lazy go-git repository
+	tmpDir, err := ioutil.TempDir("", "flux-bootstrap-")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create temporary working dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
+	gitClient := gogit.New(tmpDir, &http.BasicAuth{
+		Username: gitlabArgs.owner,
+		Password: glToken,
+	})
 
-	provider := &git.GitLabProvider{
-		IsPrivate:  gitlabArgs.private,
-		IsPersonal: gitlabArgs.personal,
+	// Install manifest config
+	installOptions := install.Options{
+		BaseURL:                rootArgs.defaults.BaseURL,
+		Version:                bootstrapArgs.version,
+		Namespace:              rootArgs.namespace,
+		Components:             bootstrapComponents(),
+		Registry:               bootstrapArgs.registry,
+		ImagePullSecret:        bootstrapArgs.imagePullSecret,
+		WatchAllNamespaces:     bootstrapArgs.watchAllNamespaces,
+		NetworkPolicy:          bootstrapArgs.networkPolicy,
+		LogLevel:               bootstrapArgs.logLevel.String(),
+		NotificationController: rootArgs.defaults.NotificationController,
+		ManifestFile:           rootArgs.defaults.ManifestFile,
+		Timeout:                rootArgs.timeout,
+		TargetPath:             gitlabArgs.path.ToSlash(),
+		ClusterDomain:          bootstrapArgs.clusterDomain,
+		TolerationKeys:         bootstrapArgs.tolerationKeys,
+	}
+	if customBaseURL := bootstrapArgs.manifestsPath; customBaseURL != "" {
+		installOptions.BaseURL = customBaseURL
 	}
 
-	// create GitLab project if doesn't exists
-	logger.Actionf("connecting to %s", gitlabArgs.hostname)
-	changed, err := provider.CreateRepository(ctx, repository)
-	if err != nil {
-		return err
+	// Source generation and secret config
+	secretOpts := sourcesecret.Options{
+		Name:         bootstrapArgs.secretName,
+		Namespace:    rootArgs.namespace,
+		TargetPath:   gitlabArgs.path.String(),
+		ManifestFile: sourcesecret.MakeDefaultOptions().ManifestFile,
 	}
-	if changed {
-		logger.Successf("repository created")
-	}
-
-	// clone repository and checkout the master branch
-	if err := repository.Checkout(ctx, bootstrapArgs.branch, tmpDir); err != nil {
-		return err
-	}
-	logger.Successf("repository cloned")
-
-	// generate install manifests
-	logger.Generatef("generating manifests")
-	installManifest, err := generateInstallManifests(gitlabArgs.path.String(), rootArgs.namespace, tmpDir, bootstrapArgs.manifestsPath)
-	if err != nil {
-		return err
-	}
-
-	// stage install manifests
-	changed, err = repository.Commit(ctx, path.Join(gitlabArgs.path.String(), rootArgs.namespace), "Add manifests")
-	if err != nil {
-		return err
-	}
-
-	// push install manifests
-	if changed {
-		if err := repository.Push(ctx); err != nil {
-			return err
-		}
-		logger.Successf("components manifests pushed")
-	} else {
-		logger.Successf("components are up to date")
-	}
-
-	// determine if repo synchronization is working
-	isInstall := shouldInstallManifests(ctx, kubeClient, rootArgs.namespace)
-
-	if isInstall {
-		// apply install manifests
-		logger.Actionf("installing components in %s namespace", rootArgs.namespace)
-		if err := applyInstallManifests(ctx, installManifest, bootstrapComponents()); err != nil {
-			return err
-		}
-		logger.Successf("install completed")
-	}
-
-	repoURL := repository.GetURL()
-
 	if bootstrapArgs.tokenAuth {
-		// setup HTTPS token auth
-		secret := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      rootArgs.namespace,
-				Namespace: rootArgs.namespace,
-			},
-			StringData: map[string]string{
-				"username": "git",
-				"password": glToken,
-			},
-		}
-		if err := upsertSecret(ctx, kubeClient, secret); err != nil {
-			return err
+		secretOpts.Username = "git"
+		secretOpts.Password = glToken
+
+		if bootstrapArgs.caFile != "" {
+			secretOpts.CAFilePath = bootstrapArgs.caFile
 		}
 	} else {
-		// setup SSH deploy key
-		repoURL = repository.GetSSH()
-		if shouldCreateDeployKey(ctx, kubeClient, rootArgs.namespace) {
-			logger.Actionf("configuring deploy key")
-			u, err := url.Parse(repoURL)
-			if err != nil {
-				return fmt.Errorf("git URL parse failed: %w", err)
-			}
+		secretOpts.PrivateKeyAlgorithm = sourcesecret.PrivateKeyAlgorithm(bootstrapArgs.keyAlgorithm)
+		secretOpts.RSAKeyBits = int(bootstrapArgs.keyRSABits)
+		secretOpts.ECDSACurve = bootstrapArgs.keyECDSACurve.Curve
+		secretOpts.SSHHostname = gitlabArgs.hostname
 
-			key, err := generateDeployKey(ctx, kubeClient, u, rootArgs.namespace)
-			if err != nil {
-				return fmt.Errorf("generating deploy key failed: %w", err)
-			}
-
-			keyName := "flux"
-			if gitlabArgs.path != "" {
-				keyName = fmt.Sprintf("flux-%s", gitlabArgs.path)
-			}
-
-			if changed, err := provider.AddDeployKey(ctx, repository, key, keyName); err != nil {
-				return err
-			} else if changed {
-				logger.Successf("deploy key configured")
-			}
+		if bootstrapArgs.privateKeyFile != "" {
+			secretOpts.PrivateKeyPath = bootstrapArgs.privateKeyFile
+		}
+		if bootstrapArgs.sshHostname != "" {
+			secretOpts.SSHHostname = bootstrapArgs.sshHostname
 		}
 	}
 
-	// configure repo synchronization
-	logger.Actionf("generating sync manifests")
-	syncManifests, err := generateSyncManifests(repoURL, bootstrapArgs.branch, rootArgs.namespace, rootArgs.namespace, filepath.ToSlash(gitlabArgs.path.String()), tmpDir, gitlabArgs.interval)
+	// Sync manifest config
+	syncOpts := sync.Options{
+		Interval:          gitlabArgs.interval,
+		Name:              rootArgs.namespace,
+		Namespace:         rootArgs.namespace,
+		Branch:            bootstrapArgs.branch,
+		Secret:            bootstrapArgs.secretName,
+		TargetPath:        gitlabArgs.path.ToSlash(),
+		ManifestFile:      sync.MakeDefaultOptions().ManifestFile,
+		GitImplementation: sourceGitArgs.gitImplementation.String(),
+		RecurseSubmodules: bootstrapArgs.recurseSubmodules,
+	}
+
+	// Bootstrap config
+	bootstrapOpts := []bootstrap.GitProviderOption{
+		bootstrap.WithProviderRepository(gitlabArgs.owner, gitlabArgs.repository, gitlabArgs.personal),
+		bootstrap.WithBranch(bootstrapArgs.branch),
+		bootstrap.WithBootstrapTransportType("https"),
+		bootstrap.WithAuthor(bootstrapArgs.authorName, bootstrapArgs.authorEmail),
+		bootstrap.WithCommitMessageAppendix(bootstrapArgs.commitMessageAppendix),
+		bootstrap.WithProviderTeamPermissions(mapTeamSlice(gitlabArgs.teams, glDefaultPermission)),
+		bootstrap.WithReadWriteKeyPermissions(gitlabArgs.readWriteKey),
+		bootstrap.WithKubeconfig(rootArgs.kubeconfig, rootArgs.kubecontext),
+		bootstrap.WithLogger(logger),
+	}
+	if bootstrapArgs.sshHostname != "" {
+		bootstrapOpts = append(bootstrapOpts, bootstrap.WithSSHHostname(bootstrapArgs.sshHostname))
+	}
+	if bootstrapArgs.tokenAuth {
+		bootstrapOpts = append(bootstrapOpts, bootstrap.WithSyncTransportType("https"))
+	}
+	if !gitlabArgs.private {
+		bootstrapOpts = append(bootstrapOpts, bootstrap.WithProviderRepositoryConfig("", "", "public"))
+	}
+	if gitlabArgs.reconcile {
+		bootstrapOpts = append(bootstrapOpts, bootstrap.WithReconcile())
+	}
+
+	// Setup bootstrapper with constructed configs
+	b, err := bootstrap.NewGitProviderBootstrapper(gitClient, providerClient, kubeClient, bootstrapOpts...)
 	if err != nil {
 		return err
 	}
 
-	// commit and push manifests
-	if changed, err = repository.Commit(ctx, path.Join(gitlabArgs.path.String(), rootArgs.namespace), "Add manifests"); err != nil {
-		return err
-	} else if changed {
-		if err := repository.Push(ctx); err != nil {
-			return err
-		}
-		logger.Successf("sync manifests pushed")
-	}
-
-	// apply manifests and waiting for sync
-	logger.Actionf("applying sync manifests")
-	if err := applySyncManifests(ctx, kubeClient, rootArgs.namespace, rootArgs.namespace, syncManifests); err != nil {
-		return err
-	}
-
-	logger.Successf("bootstrap finished")
-	return nil
+	// Run
+	return bootstrap.Run(ctx, b, manifestsBase, installOptions, secretOpts, syncOpts, rootArgs.pollInterval, rootArgs.timeout)
 }

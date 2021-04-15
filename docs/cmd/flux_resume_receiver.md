@@ -1,3 +1,6 @@
+---
+title: "flux resume receiver command"
+---
 ## flux resume receiver
 
 Resume a suspended Receiver
@@ -16,7 +19,6 @@ flux resume receiver [name] [flags]
 ```
   # Resume reconciliation for an existing Receiver
   flux resume receiver main
-
 ```
 
 ### Options
@@ -29,7 +31,7 @@ flux resume receiver [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -37,5 +39,5 @@ flux resume receiver [name] [flags]
 
 ### SEE ALSO
 
-* [flux resume](flux_resume.md)	 - Resume suspended resources
+* [flux resume](../flux_resume/)	 - Resume suspended resources
 

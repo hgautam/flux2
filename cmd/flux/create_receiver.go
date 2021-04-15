@@ -45,8 +45,7 @@ var createReceiverCmd = &cobra.Command{
 	--event push \
 	--secret-ref webhook-token \
 	--resource GitRepository/webapp \
-	--resource HelmRepository/webapp
-`,
+	--resource HelmRepository/webapp`,
 	RunE: createReceiverCmdRun,
 }
 
@@ -125,7 +124,7 @@ func createReceiverCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if createArgs.export {
-		return exportReceiver(receiver)
+		return printExport(exportReceiver(&receiver))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)

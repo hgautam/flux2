@@ -45,7 +45,7 @@ var createKsCmd = &cobra.Command{
 	Long:    "The kustomization source create command generates a Kustomize resource for a given source.",
 	Example: `  # Create a Kustomization resource from a source at a given path
   flux create kustomization contour \
-    --source=contour \
+    --source=GitRepository/contour \
     --path="./examples/contour/" \
     --prune=true \
     --interval=10m \
@@ -57,7 +57,16 @@ var createKsCmd = &cobra.Command{
   # Create a Kustomization resource that depends on the previous one
   flux create kustomization webapp \
     --depends-on=contour \
-    --source=webapp \
+    --source=GitRepository/webapp \
+    --path="./deploy/overlays/dev" \
+    --prune=true \
+    --interval=5m \
+    --validation=client
+
+  # Create a Kustomization using a source from a different namespace
+  flux create kustomization podinfo \
+    --namespace=default \
+    --source=GitRepository/podinfo.flux-system \
     --path="./deploy/overlays/dev" \
     --prune=true \
     --interval=5m \
@@ -67,8 +76,7 @@ var createKsCmd = &cobra.Command{
   flux create kustomization secrets \
     --source=Bucket/secrets \
     --prune=true \
-    --interval=5m
-`,
+    --interval=5m`,
 	RunE: createKsCmdRun,
 }
 
@@ -142,11 +150,12 @@ func createKsCmdRun(cmd *cobra.Command, args []string) error {
 			Interval: metav1.Duration{
 				Duration: createArgs.interval,
 			},
-			Path:  kustomizationArgs.path.String(),
+			Path:  kustomizationArgs.path.ToSlash(),
 			Prune: kustomizationArgs.prune,
 			SourceRef: kustomizev1.CrossNamespaceSourceReference{
-				Kind: kustomizationArgs.source.Kind,
-				Name: kustomizationArgs.source.Name,
+				Kind:      kustomizationArgs.source.Kind,
+				Name:      kustomizationArgs.source.Name,
+				Namespace: kustomizationArgs.source.Namespace,
 			},
 			Suspend:         false,
 			Validation:      kustomizationArgs.validation,
@@ -210,7 +219,7 @@ func createKsCmdRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if createArgs.export {
-		return exportKs(kustomization)
+		return printExport(exportKs(&kustomization))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), rootArgs.timeout)

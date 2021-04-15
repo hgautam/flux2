@@ -170,7 +170,7 @@ Create an `ImagePolicy` to tell Flux which semver range to use when filtering ta
 ```sh
 flux create image policy podinfo \
 --image-ref=podinfo \
---semver=5.0.x \
+--select-semver=5.0.x \
 --export > ./clusters/my-cluster/podinfo-policy.yaml
 ```
 
@@ -232,7 +232,7 @@ podinfo	True 	Latest image tag for 'ghcr.io/stefanprodan/podinfo' resolved to: 5
 
 ## Configure image updates
 
-Edit the `podinfo-deploy.yaml` and add a marker to tell Flux which policy to use when updating the container image:
+Edit the `podinfo-deployment.yaml` and add a marker to tell Flux which policy to use when updating the container image:
 
 ```yaml
 spec:
@@ -246,10 +246,12 @@ Create an `ImageUpdateAutomation` to tell Flux which Git repository to write ima
 ```sh
 flux create image update flux-system \
 --git-repo-ref=flux-system \
---branch=main \
+--git-repo-path="./clusters/my-cluster" \
+--checkout-branch=main \
+--push-branch=main \
 --author-name=fluxcdbot \
 --author-email=fluxcdbot@users.noreply.github.com \
---commit-template="[ci skip] update image" \
+--commit-template="{{range .Updated.Images}}{{println .}}{{end}}" \
 --export > ./clusters/my-cluster/flux-system-automation.yaml
 ```
 
@@ -269,9 +271,12 @@ spec:
   commit:
     authorEmail: fluxcdbot@users.noreply.github.com
     authorName: fluxcdbot
-    messageTemplate: '[ci skip] update image'
+    messageTemplate: '{{range .Updated.Images}}{{println .}}{{end}}'
   interval: 1m0s
+  push:
+    branch: main
   update:
+    path: ./clusters/my-cluster
     strategy: Setters
 ```
 
@@ -304,6 +309,12 @@ Wait for Flux to apply the latest commit on the cluster and verify that podinfo 
 ```console
 $ watch "kubectl get deployment/podinfo -oyaml | grep 'image:'"
 image: ghcr.io/stefanprodan/podinfo:5.0.3
+```
+
+You can check the status of the image automation objects with:
+
+```sh
+flux get images all --all-namespaces
 ```
 
 ## Configure image update for custom resources
@@ -372,6 +383,68 @@ images:
 - name: ghcr.io/stefanprodan/podinfo
   newName: ghcr.io/stefanprodan/podinfo
   newTag: 5.0.0 # {"$imagepolicy": "flux-system:podinfo:tag"}
+```
+
+## Push updates to a different branch
+
+With `.spec.push.branch` you can configure Flux to push the image updates to different branch
+than the one used for checkout. If the specified branch doesn't exist, Flux will create it for you.
+
+```yaml
+apiVersion: image.toolkit.fluxcd.io/v1alpha1
+kind: ImageUpdateAutomation
+metadata:
+  name: flux-system
+spec:
+  checkout:
+    branch: main
+    gitRepositoryRef:
+      name: flux-system
+  push:
+    branch: image-updates
+```
+
+You can use CI automation e.g. GitHub Actions such as
+[create-pull-request](https://github.com/peter-evans/create-pull-request)
+to open a pull request against the checkout branch.
+
+This way you can manually approve the image updates before they are applied on your clusters.
+
+## Configure the commit message
+
+The `.spec.commit.messageTemplate` field is a string which is used as a template for the commit message.
+
+The message template is a [Go text template](https://golang.org/pkg/text/template/) that
+lets you range over the objects and images e.g.:
+
+```yaml
+apiVersion: image.toolkit.fluxcd.io/v1alpha1
+kind: ImageUpdateAutomation
+metadata:
+  name: flux-system
+spec:
+  commit:
+    messageTemplate: |
+      Automated image update
+
+      Automation name: {{ .AutomationObject }}
+
+      Files:
+      {{ range $filename, $_ := .Updated.Files -}}
+      - {{ $filename }}
+      {{ end -}}
+
+      Objects:
+      {{ range $resource, $_ := .Updated.Objects -}}
+      - {{ $resource.Kind }} {{ $resource.Name }}
+      {{ end -}}
+
+      Images:
+      {{ range .Updated.Images -}}
+      - {{.}}
+      {{ end -}}
+    authorEmail: flux@example.com
+    authorName: flux
 ```
 
 ## Trigger image updates with webhooks
@@ -471,7 +544,7 @@ Assuming you've configured Flux to update an app to its latest stable version:
 ```sh
 flux create image policy podinfo \
 --image-ref=podinfo \
---semver=">=5.0.0"
+--select-semver=">=5.0.0"
 ```
 
 If the latest version e.g. `5.0.1` causes an incident in production, you can tell Flux to 
@@ -480,7 +553,7 @@ revert the image tag to a previous version e.g. `5.0.0` with:
 ```sh
 flux create image policy podinfo \
 --image-ref=podinfo \
---semver=5.0.0
+--select-semver=5.0.0
 ```
 
 Or by changing the semver range in Git:
@@ -505,7 +578,7 @@ and tell Flux to consider only versions greater than `5.0.1`:
 ```sh
 flux create image policy podinfo \
 --image-ref=podinfo \
---semver=">5.0.1"
+--select-semver=">5.0.1"
 ```
 
 ## ImageRepository cloud providers authentication
@@ -783,11 +856,11 @@ so that it can access GCR and download the json file.
 Then create a secret, encrypt it using [Mozilla SOPS](mozilla-sops.md)
 or [Sealed Secrets](sealed-secrets.md) , commit and push the encypted file to git.
 
-```
- kubectl create secret docker-registry <secret-name> \
-                --docker-server=<GCR-REGISTRY> \ # e.g gcr.io
-                --docker-username=_json_key \
-                --docker-password="$(cat <downloaded-json-file>)" 
+```sh
+kubectl create secret docker-registry <secret-name> \
+  --docker-server=<GCR-REGISTRY> \ # e.g gcr.io
+  --docker-username=_json_key \
+  --docker-password="$(cat <downloaded-json-file>)"
 ```
 
 ### Azure Container Registry
@@ -800,15 +873,7 @@ Note that the resulting ImagePullSecret for Flux could also be specified by Pods
 
 #### Generating Tokens for Managed Identities [short-lived]
 
-With [AAD Pod-Identity](https://azure.github.io/aad-pod-identity/docs/), we can create Pods that have their own
-cloud credentials for accessing Azure services like ACR.
-
-Your cluster should have `--enable-managed-identity` configured.
-This software can be [installed via Helm](https://azure.github.io/aad-pod-identity/docs/getting-started/installation/) not managed by Azure.
-Use Flux's `HelmRepository` and `HelmRelease` object to manage the aad-pod-identity installation from a bootstrap repository.
-
-!!! As an alternative to Helm, the `--enable-aad-pod-identity` flag for the `az aks create` is currently in Preview.
-    Follow the Azure guide for [Creating an AKS cluster with AAD Pod Identity](https://docs.microsoft.com/en-us/azure/aks/use-azure-ad-pod-identity) if you would like to enable this feature with the Azure CLI.
+As a pre-requisite, your AKS cluster will need [AAD Pod Identity](../use-cases/azure.md#aad-pod-identity) installed.
 
 Once we have AAD Pod Identity installed, we can create a Deployment that frequently refreshes an image pull secret into
 our desired Namespace.
@@ -819,7 +884,7 @@ Create a directory in your control repository and save this `kustomization.yaml`
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- https://github.com/fluxcd/flux2/archive/main.zip//manifests/integrations/registry-credentials-sync/azure
+- git@github.com/fluxcd/flux2//manifests/integrations/registry-credentials-sync/azure
 patchesStrategicMerge:
 - config-patches.yaml
 ```
@@ -858,12 +923,13 @@ Verify that `kustomize build .` works, then commit the directory to you control 
 Flux will apply the Deployment and it will use the AAD managed identity for that Pod to regularly fetch ACR tokens into your configured `KUBE_SECRET` name.
 Reference the `KUBE_SECRET` value from any `ImageRepository` objects for that ACR registry.
 
-This example uses the `fluxcd/flux2` github archive as a remote base, but you may copy the [./manifests/integrations/registry-credentials-sync/azure](github.com/fluxcd/flux2/tree/main/manifests/integrations/registry-credentials-sync/azure)
+This example uses the `fluxcd/flux2` github archive as a remote base, but you may copy the [./manifests/integrations/registry-credentials-sync/azure](https://github.com/fluxcd/flux2/tree/main/manifests/integrations/registry-credentials-sync/azure)
 folder into your own repository or use a git submodule to vendor it if preferred.
 
 #### Using Static Credentials [long-lived]
 
-!!! Using a static credential requires a Secrets management solution compatible with your GitOps workflow.
+!!! info
+    Using a static credential requires a Secrets management solution compatible with your GitOps workflow.
 
 Follow the official Azure documentation for [Creating an Image Pull Secret for ACR](https://docs.microsoft.com/en-us/azure/container-registry/container-registry-auth-kubernetes).
 
@@ -875,4 +941,5 @@ Update the `ImageRepository.spec.secretRef` to point to it.
 
 It is also possible to create [Repository Scoped Tokens](https://docs.microsoft.com/en-us/azure/container-registry/container-registry-repository-scoped-permissions).
 
-!!! Note that this feature is in preview and does have limitations.
+!!! warning
+    Repository Scoped Tokens are in preview and do have limitations.

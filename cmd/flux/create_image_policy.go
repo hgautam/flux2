@@ -32,7 +32,7 @@ import (
 )
 
 var createImagePolicyCmd = &cobra.Command{
-	Use:   "policy <name>",
+	Use:   "policy [name]",
 	Short: "Create or update an ImagePolicy object",
 	Long: `The create image policy command generates an ImagePolicy resource.
 An ImagePolicy object calculates a "latest image" given an image
@@ -40,14 +40,27 @@ repository and a policy, e.g., semver.
 
 The image that sorts highest according to the policy is recorded in
 the status of the object.`,
+	Example: `  # Create an ImagePolicy to select the latest stable release
+  flux create image policy podinfo \
+    --image-ref=podinfo \
+    --select-semver=">=1.0.0"
+
+  # Create an ImagePolicy to select the latest main branch build tagged as "${GIT_BRANCH}-${GIT_SHA:0:7}-$(date +%s)"
+  flux create image policy podinfo \
+    --image-ref=podinfo \
+    --select-numeric=asc \
+	--filter-regex='^main-[a-f0-9]+-(?P<ts>[0-9]+)' \
+	--filter-extract='$ts'`,
 	RunE: createImagePolicyRun}
 
 type imagePolicyFlags struct {
-	imageRef      string
-	semver        string
-	alpha         string
-	filterRegex   string
-	filterExtract string
+	imageRef        string
+	semver          string
+	alpha           string
+	numeric         string
+	filterRegex     string
+	filterExtract   string
+	filterNumerical string
 }
 
 var imagePolicyArgs = imagePolicyFlags{}
@@ -57,6 +70,7 @@ func init() {
 	flags.StringVar(&imagePolicyArgs.imageRef, "image-ref", "", "the name of an image repository object")
 	flags.StringVar(&imagePolicyArgs.semver, "select-semver", "", "a semver range to apply to tags; e.g., '1.x'")
 	flags.StringVar(&imagePolicyArgs.alpha, "select-alpha", "", "use alphabetical sorting to select image; either \"asc\" meaning select the last, or \"desc\" meaning select the first")
+	flags.StringVar(&imagePolicyArgs.numeric, "select-numeric", "", "use numeric sorting to select image; either \"asc\" meaning select the last, or \"desc\" meaning select the first")
 	flags.StringVar(&imagePolicyArgs.filterRegex, "filter-regex", "", "regular expression pattern used to filter the image tags")
 	flags.StringVar(&imagePolicyArgs.filterExtract, "filter-extract", "", "replacement pattern (using capture groups from --filter-regex) to use for sorting")
 
@@ -99,7 +113,9 @@ func createImagePolicyRun(cmd *cobra.Command, args []string) error {
 
 	switch {
 	case imagePolicyArgs.semver != "" && imagePolicyArgs.alpha != "":
-		return fmt.Errorf("policy cannot be specified with both --select-semver and --select-alpha")
+	case imagePolicyArgs.semver != "" && imagePolicyArgs.numeric != "":
+	case imagePolicyArgs.alpha != "" && imagePolicyArgs.numeric != "":
+		return fmt.Errorf("only one of --select-semver, --select-alpha or --select-numeric can be specified")
 	case imagePolicyArgs.semver != "":
 		policy.Spec.Policy.SemVer = &imagev1.SemVerPolicy{
 			Range: imagePolicyArgs.semver,
@@ -110,6 +126,13 @@ func createImagePolicyRun(cmd *cobra.Command, args []string) error {
 		}
 		policy.Spec.Policy.Alphabetical = &imagev1.AlphabeticalPolicy{
 			Order: imagePolicyArgs.alpha,
+		}
+	case imagePolicyArgs.numeric != "":
+		if imagePolicyArgs.numeric != "desc" && imagePolicyArgs.numeric != "asc" {
+			return fmt.Errorf("--select-numeric must be one of [\"asc\", \"desc\"]")
+		}
+		policy.Spec.Policy.Numerical = &imagev1.NumericalPolicy{
+			Order: imagePolicyArgs.numeric,
 		}
 	default:
 		return fmt.Errorf("a policy must be provided with either --select-semver or --select-alpha")

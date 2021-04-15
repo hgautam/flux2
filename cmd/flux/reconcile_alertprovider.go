@@ -21,14 +21,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fluxcd/flux2/internal/utils"
-	"github.com/fluxcd/pkg/apis/meta"
-
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	notificationv1 "github.com/fluxcd/notification-controller/api/v1beta1"
+	"github.com/fluxcd/pkg/apis/meta"
+
+	"github.com/fluxcd/flux2/internal/utils"
 )
 
 var reconcileAlertProviderCmd = &cobra.Command{
@@ -36,8 +36,7 @@ var reconcileAlertProviderCmd = &cobra.Command{
 	Short: "Reconcile a Provider",
 	Long:  `The reconcile alert-provider command triggers a reconciliation of a Provider resource and waits for it to finish.`,
 	Example: `  # Trigger a reconciliation for an existing provider
-  flux reconcile alert-provider slack
-`,
+  flux reconcile alert-provider slack`,
 	RunE: reconcileAlertProviderCmdRun,
 }
 

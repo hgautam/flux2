@@ -17,8 +17,9 @@ limitations under the License.
 package main
 
 import (
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/spf13/cobra"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 var resumeSourceGitCmd = &cobra.Command{
@@ -26,8 +27,7 @@ var resumeSourceGitCmd = &cobra.Command{
 	Short: "Resume a suspended GitRepository",
 	Long:  `The resume command marks a previously suspended GitRepository resource for reconciliation and waits for it to finish.`,
 	Example: `  # Resume reconciliation for an existing GitRepository
-  flux resume source git podinfo
-`,
+  flux resume source git podinfo`,
 	RunE: resumeCommand{
 		apiType: gitRepositoryType,
 		object:  gitRepositoryAdapter{&sourcev1.GitRepository{}},

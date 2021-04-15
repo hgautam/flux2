@@ -1,3 +1,6 @@
+---
+title: "flux get images update command"
+---
 ## flux get images update
 
 Get ImageUpdateAutomation status
@@ -18,7 +21,6 @@ flux get images update [flags]
 
  # List image update automations from all namespaces
   flux get image update --all-namespaces
-
 ```
 
 ### Options
@@ -32,7 +34,7 @@ flux get images update [flags]
 ```
   -A, --all-namespaces      list the requested object(s) across all namespaces
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -40,5 +42,5 @@ flux get images update [flags]
 
 ### SEE ALSO
 
-* [flux get images](flux_get_images.md)	 - Get image automation object status
+* [flux get images](../flux_get_images/)	 - Get image automation object status
 

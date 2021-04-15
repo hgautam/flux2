@@ -18,8 +18,10 @@ package main
 
 import (
 	"fmt"
-	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
+
 	"github.com/spf13/cobra"
+
+	helmv2 "github.com/fluxcd/helm-controller/api/v2beta1"
 )
 
 var resumeHrCmd = &cobra.Command{
@@ -29,8 +31,7 @@ var resumeHrCmd = &cobra.Command{
 	Long: `The resume command marks a previously suspended HelmRelease resource for reconciliation and waits for it to
 finish the apply.`,
 	Example: `  # Resume reconciliation for an existing Helm release
-  flux resume hr podinfo
-`,
+  flux resume hr podinfo`,
 	RunE: resumeCommand{
 		apiType: helmReleaseType,
 		object:  helmReleaseAdapter{&helmv2.HelmRelease{}},

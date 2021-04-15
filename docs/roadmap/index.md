@@ -1,14 +1,49 @@
 # Roadmap
 
-In our planning discussions we identified broad three areas of work:
+!!! hint "Production readiness"
+    The Flux custom resource definitions which are at `v1beta1` and `v2beta1`
+    and their controllers are considered stable and production ready.
+    Going forward, breaking changes to the beta CRDs will be accompanied by a conversion mechanism.
+    Please see the [Migration and Suport Timetable](../migration/timetable.md) for our commitment to end users.
+
+The following components (included by default in [flux bootstrap](../guides/installation.md#bootstrap))
+are considered production ready:
+
+- [source-controller](../components/source)
+- [kustomize-controller](../components/kustomize)
+- [notification-controller](../components/notification)
+- [helm-controller](../components/helm)
+
+The following GitOps Toolkit APIs are considered production ready:
+
+- `source.toolkit.fluxcd.io/v1beta1`
+- `kustomize.toolkit.fluxcd.io/v1beta1`
+- `notification.toolkit.fluxcd.io/v1beta1`
+- `helm.toolkit.fluxcd.io/v2beta1`
+
+## The road to Flux v2 GA
+
+In our planning discussions we have identified these possible areas of work,
+this list is subject to change while we gather feedback:
+
+- Stabilize the image automation APIs
+    * Review the spec of `ImageRepository`, `ImagePolicy` and `ImageUpdateAutomation`
+    * Promote the image automation APIs to `v1beta1`
+    * Include the image automation controllers in the default components list
+
+- Improve the documentation
+    * Gather feedback on the [migration guides](https://github.com/fluxcd/flux2/discussions/413) and address more use-cases
+    * Incident management and troubleshooting guides
+    * Cloud specific guides (AWS, Azure, Google Cloud, more?)
+    * Consolidate the docs under [fluxcd.io](https://fluxcd.io) website
+    
+## The road to Flux v1 feature parity
+
+In our planning discussions we identified three areas of work:
 
 - Feature parity with Flux v1 in read-only mode
 - Feature parity with the image-update functionality in Flux v1
 - Feature parity with Helm Operator v1
-
-All of the above will constitute "Flux v2".
-
-## The road to Flux v2
 
 ### Flux read-only feature parity
 
@@ -43,12 +78,13 @@ Tasks
 - [x]  <span style="color:grey">Implement a notification controller for Slack, MS Teams, Discord, Rocket</span>
 - [x]  <span style="color:grey">Implement Prometheus metrics in source and kustomize controllers</span>
 - [x]  <span style="color:grey">Review the git source and kustomize APIs</span>
+- [x]  <span style="color:grey">Support [bash-style variable substitution](https://toolkit.fluxcd.io/components/kustomize/kustomization/#variable-substitution) as an alternative to `flux.yaml` envsubst/sed usage</span>
 - [x]  <span style="color:grey">Create a migration guide for `flux.yaml` kustomize users</span>
 - [x]  <span style="color:grey">Include support for SOPS</span>
 
 ### Flux image update feature parity
 
-[= 80% "80%"]
+[= 100% "100%"]
 
 Image automation is available as a prerelease. See [this
 guide](https://toolkit.fluxcd.io/guides/image-update/) for how to
@@ -61,6 +97,7 @@ Goals
 Non-Goals
 
 -  Maintain backwards compatibility with Flux v1 annotations
+-  [Order by timestamps found inside image layers](https://github.com/fluxcd/flux2/discussions/802)
 
 Tasks
 
@@ -68,16 +105,12 @@ Tasks
 - [x] <span style="color:grey">Implement an image scanning controller</span>
 - [x] <span style="color:grey">Public image repo support</span>
 - [x] <span style="color:grey">Credentials from Secret [fluxcd/image-reflector-controller#35](https://github.com/fluxcd/image-reflector-controller/pull/35)</span>
-- [ ] ECR-specific support [fluxcd/image-reflector-controller#11](https://github.com/fluxcd/image-reflector-controller/issues/11)
-- [ ] GCR-specific support [fluxcd/image-reflector-controller#11](https://github.com/fluxcd/image-reflector-controller/issues/11)
-- [ ] Azure-specific support [fluxcd/image-reflector-controller#11](https://github.com/fluxcd/image-reflector-controller/issues/11)
 - [x] <span style="color:grey">Design the automation component</span>
 - [x] <span style="color:grey">Implement the image scan/patch/push workflow</span>
 - [x] <span style="color:grey">Integrate the new components in the Flux CLI [fluxcd/flux2#538](https://github.com/fluxcd/flux2/pull/538)</span>
 - [x] <span style="color:grey">Write a guide for how to use image automation ([guide here](https://toolkit.fluxcd.io/guides/image-update/))</span>
-- [ ] Write a migration guide from Flux annotations
-
-## The road to Helm Operator v2
+- [x] <span style="color:grey">ACR/ECR/GCR integration ([guide here](https://toolkit.fluxcd.io/guides/image-update/#imagerepository-cloud-providers-authentication))</span>
+- [x] <span style="color:grey">Write a migration guide from Flux v1 annotations ([guide here](https://toolkit.fluxcd.io/guides/flux-v1-automation-migration/))</span>
 
 ### Helm v3 feature parity
 
@@ -113,4 +146,3 @@ Tasks
 - [x]  <span style="color:grey">Implement support for referring to an alternative chart values file</span>
 - [x]  <span style="color:grey">Stabilize API</span>
 - [x]  <span style="color:grey">[Create a migration guide for Helm Operator users](../guides/helm-operator-migration.md)</span>
-- [ ] [Gather feedback on the migration guide](https://github.com/fluxcd/flux2/discussions/413)

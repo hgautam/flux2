@@ -1,3 +1,6 @@
+---
+title: "flux resume image update command"
+---
 ## flux resume image update
 
 Resume a suspended ImageUpdateAutomation
@@ -15,7 +18,6 @@ flux resume image update [name] [flags]
 ```
   # Resume reconciliation for an existing ImageUpdateAutomation
   flux resume image update latest-images
-
 ```
 
 ### Options
@@ -28,7 +30,7 @@ flux resume image update [name] [flags]
 
 ```
       --context string      kubernetes context to use
-      --kubeconfig string   path to the kubeconfig file (default "~/.kube/config")
+      --kubeconfig string   absolute path to the kubeconfig file
   -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --timeout duration    timeout for this operation (default 5m0s)
       --verbose             print generated objects
@@ -36,5 +38,5 @@ flux resume image update [name] [flags]
 
 ### SEE ALSO
 
-* [flux resume image](flux_resume_image.md)	 - Resume image automation objects
+* [flux resume image](../flux_resume_image/)	 - Resume image automation objects
 
