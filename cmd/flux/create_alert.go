@@ -58,7 +58,7 @@ var alertArgs alertFlags
 func init() {
 	createAlertCmd.Flags().StringVar(&alertArgs.providerRef, "provider-ref", "", "reference to provider")
 	createAlertCmd.Flags().StringVar(&alertArgs.eventSeverity, "event-severity", "", "severity of events to send alerts for")
-	createAlertCmd.Flags().StringArrayVar(&alertArgs.eventSources, "event-source", []string{}, "sources that should generate alerts (<kind>/<name>)")
+	createAlertCmd.Flags().StringSliceVar(&alertArgs.eventSources, "event-source", []string{}, "sources that should generate alerts (<kind>/<name>), also accepts comma-separated values")
 	createCmd.AddCommand(createAlertCmd)
 }
 
@@ -74,14 +74,15 @@ func createAlertCmdRun(cmd *cobra.Command, args []string) error {
 
 	eventSources := []notificationv1.CrossNamespaceObjectReference{}
 	for _, eventSource := range alertArgs.eventSources {
-		kind, name := utils.ParseObjectKindName(eventSource)
+		kind, name, namespace := utils.ParseObjectKindNameNamespace(eventSource)
 		if kind == "" {
 			return fmt.Errorf("invalid event source '%s', must be in format <kind>/<name>", eventSource)
 		}
 
 		eventSources = append(eventSources, notificationv1.CrossNamespaceObjectReference{
-			Kind: kind,
-			Name: name,
+			Kind:      kind,
+			Name:      name,
+			Namespace: namespace,
 		})
 	}
 

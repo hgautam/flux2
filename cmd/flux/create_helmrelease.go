@@ -113,9 +113,10 @@ type helmReleaseFlags struct {
 	chart           string
 	chartVersion    string
 	targetNamespace string
-	valuesFile      []string
+	valuesFiles     []string
 	valuesFrom      flags.HelmReleaseValuesFrom
 	saName          string
+	crds            flags.CRDsPolicy
 }
 
 var helmReleaseArgs helmReleaseFlags
@@ -125,11 +126,12 @@ func init() {
 	createHelmReleaseCmd.Flags().Var(&helmReleaseArgs.source, "source", helmReleaseArgs.source.Description())
 	createHelmReleaseCmd.Flags().StringVar(&helmReleaseArgs.chart, "chart", "", "Helm chart name or path")
 	createHelmReleaseCmd.Flags().StringVar(&helmReleaseArgs.chartVersion, "chart-version", "", "Helm chart version, accepts a semver range (ignored for charts from GitRepository sources)")
-	createHelmReleaseCmd.Flags().StringArrayVar(&helmReleaseArgs.dependsOn, "depends-on", nil, "HelmReleases that must be ready before this release can be installed, supported formats '<name>' and '<namespace>/<name>'")
+	createHelmReleaseCmd.Flags().StringSliceVar(&helmReleaseArgs.dependsOn, "depends-on", nil, "HelmReleases that must be ready before this release can be installed, supported formats '<name>' and '<namespace>/<name>'")
 	createHelmReleaseCmd.Flags().StringVar(&helmReleaseArgs.targetNamespace, "target-namespace", "", "namespace to install this release, defaults to the HelmRelease namespace")
 	createHelmReleaseCmd.Flags().StringVar(&helmReleaseArgs.saName, "service-account", "", "the name of the service account to impersonate when reconciling this HelmRelease")
-	createHelmReleaseCmd.Flags().StringArrayVar(&helmReleaseArgs.valuesFile, "values", nil, "local path to values.yaml files")
+	createHelmReleaseCmd.Flags().StringSliceVar(&helmReleaseArgs.valuesFiles, "values", nil, "local path to values.yaml files, also accepts comma-separated values")
 	createHelmReleaseCmd.Flags().Var(&helmReleaseArgs.valuesFrom, "values-from", helmReleaseArgs.valuesFrom.Description())
+	createHelmReleaseCmd.Flags().Var(&helmReleaseArgs.crds, "crds", helmReleaseArgs.crds.Description())
 	createCmd.AddCommand(createHelmReleaseCmd)
 }
 
@@ -184,9 +186,14 @@ func createHelmReleaseCmdRun(cmd *cobra.Command, args []string) error {
 		helmRelease.Spec.ServiceAccountName = helmReleaseArgs.saName
 	}
 
-	if len(helmReleaseArgs.valuesFile) > 0 {
-		var valuesMap map[string]interface{}
-		for _, v := range helmReleaseArgs.valuesFile {
+	if helmReleaseArgs.crds != "" {
+		helmRelease.Spec.Install = &helmv2.Install{CRDs: helmv2.Create}
+		helmRelease.Spec.Upgrade = &helmv2.Upgrade{CRDs: helmv2.CRDsPolicy(helmReleaseArgs.crds.String())}
+	}
+
+	if len(helmReleaseArgs.valuesFiles) > 0 {
+		valuesMap := make(map[string]interface{})
+		for _, v := range helmReleaseArgs.valuesFiles {
 			data, err := ioutil.ReadFile(v)
 			if err != nil {
 				return fmt.Errorf("reading values from %s failed: %w", v, err)
@@ -202,11 +209,7 @@ func createHelmReleaseCmdRun(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("unmarshaling values from %s failed: %w", v, err)
 			}
 
-			if valuesMap == nil {
-				valuesMap = jsonMap
-			} else {
-				valuesMap = transform.MergeMaps(valuesMap, jsonMap)
-			}
+			valuesMap = transform.MergeMaps(valuesMap, jsonMap)
 		}
 
 		jsonRaw, err := json.Marshal(valuesMap)

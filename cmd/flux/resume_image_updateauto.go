@@ -19,7 +19,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	autov1 "github.com/fluxcd/image-automation-controller/api/v1alpha1"
+	autov1 "github.com/fluxcd/image-automation-controller/api/v1alpha2"
 )
 
 var resumeImageUpdateCmd = &cobra.Command{
@@ -31,6 +31,7 @@ var resumeImageUpdateCmd = &cobra.Command{
 	RunE: resumeCommand{
 		apiType: imageUpdateAutomationType,
 		object:  imageUpdateAutomationAdapter{&autov1.ImageUpdateAutomation{}},
+		list:    imageUpdateAutomationListAdapter{&autov1.ImageUpdateAutomationList{}},
 	}.run,
 }
 
@@ -44,4 +45,8 @@ func (obj imageUpdateAutomationAdapter) setUnsuspended() {
 
 func (obj imageUpdateAutomationAdapter) getObservedGeneration() int64 {
 	return obj.ImageUpdateAutomation.Status.ObservedGeneration
+}
+
+func (a imageUpdateAutomationListAdapter) resumeItem(i int) resumable {
+	return &imageUpdateAutomationAdapter{&a.ImageUpdateAutomationList.Items[i]}
 }

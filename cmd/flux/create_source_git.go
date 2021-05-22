@@ -101,6 +101,15 @@ For private Git repositories, the basic authentication credentials are stored in
     --branch=master \
     --private-key-file=./private.key
 
+  # Create a source for a Git repository using SSH authentication and a
+  # private key with a password from file
+  # The public SSH host key will still be gathered from the host
+  flux create source git podinfo \
+    --url=ssh://git@github.com/stefanprodan/podinfo \
+    --branch=master \
+    --private-key-file=./private.key \
+    --password=<password>
+
   # Create a source for a Git repository using basic authentication
   flux create source git podinfo \
     --url=https://github.com/stefanprodan/podinfo \
@@ -113,7 +122,7 @@ var sourceGitArgs = newSourceGitFlags()
 
 func init() {
 	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.url, "url", "", "git address, e.g. ssh://git@host/org/repository")
-	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.branch, "branch", "master", "git branch")
+	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.branch, "branch", "", "git branch")
 	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.tag, "tag", "", "git tag")
 	createSourceGitCmd.Flags().StringVar(&sourceGitArgs.semver, "tag-semver", "", "git tag semver range")
 	createSourceGitCmd.Flags().StringVarP(&sourceGitArgs.username, "username", "u", "", "basic authentication username")
@@ -155,6 +164,10 @@ func createSourceGitCmdRun(cmd *cobra.Command, args []string) error {
 	}
 	if u.Scheme != "ssh" && u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("git URL scheme '%s' not supported, can be: ssh, http and https", u.Scheme)
+	}
+
+	if sourceGitArgs.branch == "" && sourceGitArgs.tag == "" && sourceGitArgs.semver == "" {
+		return fmt.Errorf("a Git ref is required, use one of the following: --branch, --tag or --tag-semver")
 	}
 
 	if sourceGitArgs.caFile != "" && u.Scheme == "ssh" {
@@ -236,6 +249,7 @@ func createSourceGitCmdRun(cmd *cobra.Command, args []string) error {
 			secretOpts.PrivateKeyAlgorithm = sourcesecret.PrivateKeyAlgorithm(sourceGitArgs.keyAlgorithm)
 			secretOpts.RSAKeyBits = int(sourceGitArgs.keyRSABits)
 			secretOpts.ECDSACurve = sourceGitArgs.keyECDSACurve.Curve
+			secretOpts.Password = sourceGitArgs.password
 		case "https":
 			secretOpts.Username = sourceGitArgs.username
 			secretOpts.Password = sourceGitArgs.password

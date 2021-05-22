@@ -19,7 +19,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	autov1 "github.com/fluxcd/image-automation-controller/api/v1alpha1"
+	autov1 "github.com/fluxcd/image-automation-controller/api/v1alpha2"
 )
 
 var suspendImageUpdateCmd = &cobra.Command{
@@ -31,6 +31,7 @@ var suspendImageUpdateCmd = &cobra.Command{
 	RunE: suspendCommand{
 		apiType: imageUpdateAutomationType,
 		object:  imageUpdateAutomationAdapter{&autov1.ImageUpdateAutomation{}},
+		list:    &imageUpdateAutomationListAdapter{&autov1.ImageUpdateAutomationList{}},
 	}.run,
 }
 
@@ -44,4 +45,8 @@ func (update imageUpdateAutomationAdapter) isSuspended() bool {
 
 func (update imageUpdateAutomationAdapter) setSuspended() {
 	update.ImageUpdateAutomation.Spec.Suspend = true
+}
+
+func (a imageUpdateAutomationListAdapter) item(i int) suspendable {
+	return &imageUpdateAutomationAdapter{&a.ImageUpdateAutomationList.Items[i]}
 }

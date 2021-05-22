@@ -30,6 +30,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	cryptossh "golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/fluxcd/flux2/internal/bootstrap"
@@ -56,6 +57,9 @@ command will perform an upgrade if needed.`,
 
   # Run bootstrap for a Git repository with a passwordless private key
   flux bootstrap git --url=ssh://git@example.com/repository.git --private-key-file=<path/to/private.key>
+
+  # Run bootstrap for a Git repository with a private key and password
+  flux bootstrap git --url=ssh://git@example.com/repository.git --private-key-file=<path/to/private.key> --password=<password>
 `,
 	RunE: bootstrapGitCmdRun,
 }
@@ -163,13 +167,13 @@ func bootstrapGitCmdRun(cmd *cobra.Command, args []string) error {
 		repositoryURL.Host = repositoryURL.Hostname()
 	} else {
 		secretOpts.PrivateKeyAlgorithm = sourcesecret.PrivateKeyAlgorithm(bootstrapArgs.keyAlgorithm)
+		secretOpts.Password = gitArgs.password
 		secretOpts.RSAKeyBits = int(bootstrapArgs.keyRSABits)
 		secretOpts.ECDSACurve = bootstrapArgs.keyECDSACurve.Curve
 
 		// Configure repository URL to match auth config for sync.
 		repositoryURL.User = url.User(gitArgs.username)
 		repositoryURL.Scheme = "ssh"
-		repositoryURL.Host = repositoryURL.Hostname()
 		if bootstrapArgs.sshHostname != "" {
 			repositoryURL.Host = bootstrapArgs.sshHostname
 		}
@@ -189,7 +193,7 @@ func bootstrapGitCmdRun(cmd *cobra.Command, args []string) error {
 		URL:               repositoryURL.String(),
 		Branch:            bootstrapArgs.branch,
 		Secret:            bootstrapArgs.secretName,
-		TargetPath:        gitArgs.path.String(),
+		TargetPath:        gitArgs.path.ToSlash(),
 		ManifestFile:      sync.MakeDefaultOptions().ManifestFile,
 		GitImplementation: sourceGitArgs.gitImplementation.String(),
 		RecurseSubmodules: bootstrapArgs.recurseSubmodules,
@@ -229,7 +233,20 @@ func transportForURL(u *url.URL) (transport.AuthMethod, error) {
 		}, nil
 	case "ssh":
 		if bootstrapArgs.privateKeyFile != "" {
-			return ssh.NewPublicKeysFromFile(u.User.Username(), bootstrapArgs.privateKeyFile, "")
+			// TODO(hidde): replace custom logic with https://github.com/go-git/go-git/pull/298
+			//  once made available in go-git release.
+			bytes, err := ioutil.ReadFile(bootstrapArgs.privateKeyFile)
+			if err != nil {
+				return nil, err
+			}
+			signer, err := cryptossh.ParsePrivateKey(bytes)
+			if _, ok := err.(*cryptossh.PassphraseMissingError); ok {
+				signer, err = cryptossh.ParsePrivateKeyWithPassphrase(bytes, []byte(gitArgs.password))
+			}
+			if err != nil {
+				return nil, err
+			}
+			return &ssh.PublicKeys{Signer: signer, User: u.User.Username()}, nil
 		}
 		return nil, nil
 	default:

@@ -280,11 +280,8 @@ func (b *GitProviderBootstrapper) reconcileOrgRepository(ctx context.Context) (g
 		}
 		// go-git-providers has at present some issues with the idempotency
 		// of the available Reconcile methods, and setting e.g. the default
-		// branch correctly. Resort to Create with AutoInit until this has
-		// been resolved.
-		repo, err = b.provider.OrgRepositories().Create(ctx, repoRef, repoInfo, &gitprovider.RepositoryCreateOptions{
-			AutoInit: gitprovider.BoolVar(true),
-		})
+		// branch correctly. Resort to Create until this has been resolved.
+		repo, err = b.provider.OrgRepositories().Create(ctx, repoRef, repoInfo)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new Git repository %q: %w", repoRef.String(), err)
 		}
@@ -324,9 +321,8 @@ func (b *GitProviderBootstrapper) reconcileOrgRepository(ctx context.Context) (g
 			_, changed, err = repo.TeamAccess().Reconcile(ctx, i)
 			if err != nil {
 				warning = fmt.Errorf("failed to grant permissions to team: %w", ErrReconciledWithWarning)
-				b.logger.Failuref("failed to grant %q permissions to %q: %w", *i.Permission, i.Name, err)
-			}
-			if changed {
+				b.logger.Failuref("failed to grant %q permissions to %q: %s", *i.Permission, i.Name, err.Error())
+			} else if changed {
 				b.logger.Successf("granted %q permissions to %q", *i.Permission, i.Name)
 			}
 		}
@@ -348,6 +344,7 @@ func (b *GitProviderBootstrapper) reconcileUserRepository(ctx context.Context) (
 	repoRef := newUserRepositoryRef(userRef, repoName)
 	repoInfo := newRepositoryInfo(b.description, b.defaultBranch, b.visibility)
 
+	// Reconcile the user repository
 	repo, err := b.provider.UserRepositories().Get(ctx, repoRef)
 	if err != nil {
 		if !errors.Is(err, gitprovider.ErrNotFound) {
@@ -355,9 +352,8 @@ func (b *GitProviderBootstrapper) reconcileUserRepository(ctx context.Context) (
 		}
 		// go-git-providers has at present some issues with the idempotency
 		// of the available Reconcile methods, and setting e.g. the default
-		// branch correctly. Resort to Create with AutoInit until this has
-		// been resolved.
-		repo, err = b.provider.UserRepositories().Create(ctx, repoRef, repoInfo, &gitprovider.RepositoryCreateOptions{})
+		// branch correctly. Resort to Create until this has been resolved.
+		repo, err = b.provider.UserRepositories().Create(ctx, repoRef, repoInfo)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new Git repository %q: %w", repoRef.String(), err)
 		}

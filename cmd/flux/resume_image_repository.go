@@ -19,7 +19,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	imagev1 "github.com/fluxcd/image-reflector-controller/api/v1alpha1"
+	imagev1 "github.com/fluxcd/image-reflector-controller/api/v1alpha2"
 )
 
 var resumeImageRepositoryCmd = &cobra.Command{
@@ -31,6 +31,7 @@ var resumeImageRepositoryCmd = &cobra.Command{
 	RunE: resumeCommand{
 		apiType: imageRepositoryType,
 		object:  imageRepositoryAdapter{&imagev1.ImageRepository{}},
+		list:    imageRepositoryListAdapter{&imagev1.ImageRepositoryList{}},
 	}.run,
 }
 
@@ -44,4 +45,8 @@ func (obj imageRepositoryAdapter) getObservedGeneration() int64 {
 
 func (obj imageRepositoryAdapter) setUnsuspended() {
 	obj.ImageRepository.Spec.Suspend = false
+}
+
+func (a imageRepositoryListAdapter) resumeItem(i int) resumable {
+	return &imageRepositoryAdapter{&a.ImageRepositoryList.Items[i]}
 }
